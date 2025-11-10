@@ -1,0 +1,1 @@
+run = "docker build -t funapp . && docker run -p 80:80 -e PORT=80 funapp"
