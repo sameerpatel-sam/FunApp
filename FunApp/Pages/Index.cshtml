@@ -30,6 +30,12 @@
                 <button id="nextQuestion" class="bg-white text-purple-700 font-semibold px-5 py-3 rounded-lg shadow hover:scale-[1.02] transition">Next Question</button>
                 <button id="clearAnswers" class="bg-white/20 text-white px-4 py-2 rounded-lg hover:bg-white/30 transition">Clear Answers</button>
             </div>
+
+            <!-- Activity Log -->
+            <div class="mt-6 bg-white/10 rounded-lg p-4">
+                <h3 class="text-sm font-semibold mb-2">Activity Log</h3>
+                <div id="activityLog" class="text-sm space-y-1 max-h-32 overflow-y-auto"></div>
+            </div>
         </div>
 
         <!-- Right: Join Info Panel -->
@@ -67,9 +73,44 @@
 
         let participants = {};
 
+        // Activity log handling
+        function addActivityLog(message) {
+            const log = document.getElementById('activityLog');
+            const entry = document.createElement('div');
+            entry.className = 'py-1 border-b border-white/10';
+            entry.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
+            log.insertBefore(entry, log.firstChild);
+        }
+
+        // Show a temporary banner on the host screen when a participant switches away
+        function showSwitchBanner(name, count) {
+            // Remove existing banner if present
+            const existing = document.getElementById('switchBanner');
+            if (existing) existing.remove();
+
+            const banner = document.createElement('div');
+            banner.id = 'switchBanner';
+            banner.className = 'fixed top-4 left-1/2 -translate-x-1/2 bg-yellow-300 text-black px-4 py-2 rounded shadow z-50';
+            banner.textContent = `${name} switched away (${count} times)`;
+            document.body.appendChild(banner);
+
+            // Auto-remove after 4 seconds
+            setTimeout(() => banner.remove(), 4000);
+        }
+
+        connection.on("UserSwitchedAway", (data) => {
+            // SignalR payload uses C# property names; accept either casing for robustness
+            const userName = data.UserName ?? data.userName ?? 'Unknown participant';
+            const switchCount = data.SwitchCount ?? data.switchCount ?? 0;
+
+            addActivityLog(`${userName} switched away from quiz (${switchCount} times)`);
+            showSwitchBanner(userName, switchCount);
+        });
+
         connection.on("UserJoined", (user) => {
             participants[user.connectionId] = user;
             document.getElementById('participantCount').textContent = Object.keys(participants).length;
+            addActivityLog(`?? ${user.name} joined the quiz`);
         });
 
         connection.on("AnswerReceived", (userAnswer) => {

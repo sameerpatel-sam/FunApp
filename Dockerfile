@@ -1,8 +1,8 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 COPY . ./
-# Publish the project (csproj is in this folder)
-RUN dotnet publish ./FunApp.csproj -c Release -o /app/publish
+# Publish the project - project is in FunApp/FunApp.csproj
+RUN dotnet publish ./FunApp/FunApp.csproj -c Release -o /app/publish
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0
 WORKDIR /app

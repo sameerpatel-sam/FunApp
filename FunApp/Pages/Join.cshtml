@@ -32,6 +32,15 @@
         </div>
 
         <div class="mt-4 text-center text-xs text-slate-500">Tip: Use your phone to answer while the host displays questions on a big screen.</div>
+        
+        <!-- Warning Modal -->
+        <div id="warningModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+            <div class="bg-white p-6 rounded-lg max-w-md mx-4">
+                <h3 class="text-xl font-bold text-red-600">Warning!</h3>
+                <p class="mt-2 text-gray-600">Switching away from the quiz may be considered cheating. Please stay focused on the quiz.</p>
+                <button onclick="closeWarningModal()" class="mt-4 w-full bg-red-600 text-white px-4 py-2 rounded-lg">I Understand</button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -42,6 +51,44 @@
             .withUrl("/quizHub")
             .withAutomaticReconnect()
             .build();
+
+        // Track if user is in quiz mode
+        let inQuizMode = false;
+        let switchCount = 0;
+        const MAX_SWITCHES = 3;
+
+        // Handle visibility change
+        document.addEventListener('visibilitychange', function() {
+            if (inQuizMode) {
+                if (document.hidden) {
+                    switchCount++;
+                    showWarningModal();
+                    connection.invoke("ReportVisibilityChange", switchCount)
+                        .catch(console.error);
+                    
+                    if (switchCount >= MAX_SWITCHES) {
+                        document.getElementById("answer").disabled = true;
+                        alert("You have switched away too many times. Your answers will be marked as potentially invalid.");
+                    }
+                }
+            }
+        });
+
+        // Warn before leaving
+        window.addEventListener('beforeunload', function(e) {
+            if (inQuizMode) {
+                e.preventDefault();
+                e.returnValue = '';
+            }
+        });
+
+        function showWarningModal() {
+            document.getElementById('warningModal').classList.remove('hidden');
+        }
+
+        function closeWarningModal() {
+            document.getElementById('warningModal').classList.add('hidden');
+        }
 
         connection.on("NewQuestion", (question) => {
             document.getElementById("questionDisplay").textContent = question;
@@ -60,6 +107,7 @@
                 .then(() => {
                     document.getElementById("joinForm").classList.add("hidden");
                     document.getElementById("quizView").classList.remove("hidden");
+                    inQuizMode = true;  // Enable quiz mode tracking
                 })
                 .catch(console.error);
         }
