@@ -66,3 +66,4 @@ app.MapHub<QuizHub>("/quizHub");
 app.MapGet("/health", () => Results.Ok("OK"));
 
 app.Run();
+

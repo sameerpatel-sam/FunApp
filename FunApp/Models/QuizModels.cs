@@ -4,7 +4,6 @@ namespace FunApp.Models
     {
         public string ConnectionId { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
-        public int SwitchCount { get; set; } = 0; // track times user switched away
     }
 
     public class UserAnswer

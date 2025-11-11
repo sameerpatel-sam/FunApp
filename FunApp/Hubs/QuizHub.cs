@@ -27,22 +27,18 @@ namespace FunApp.Hubs
             await Clients.All.SendAsync("AnswerReceived", userAnswer);
         }
 
-        // ReportVisibilityChange no longer trusts client-provided counts; increment on the server
-        public async Task ReportVisibilityChange(int _ignoredSwitchCount)
+        public async Task ReportVisibilityChange(int switchCount)
         {
             var user = _quizService.GetUser(Context.ConnectionId);
             if (user != null)
             {
-                var newCount = _quizService.IncrementSwitchCount(Context.ConnectionId);
-
-                _logger.LogWarning("User {UserName} switched away from quiz. Server switch count: {SwitchCount}",
-                    user.Name, newCount);
-
-                // Notify quiz host about the switch with server-side count
-                await Clients.Others.SendAsync("UserSwitchedAway", new
-                {
-                    UserName = user.Name,
-                    SwitchCount = newCount
+                _logger.LogWarning("User {UserName} switched away from quiz. Switch count: {SwitchCount}", 
+                    user.Name, switchCount);
+                
+                // Notify quiz host about the switch
+                await Clients.Others.SendAsync("UserSwitchedAway", new { 
+                    UserName = user.Name, 
+                    SwitchCount = switchCount 
                 });
             }
         }

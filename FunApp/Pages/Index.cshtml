@@ -82,29 +82,8 @@
             log.insertBefore(entry, log.firstChild);
         }
 
-        // Show a temporary banner on the host screen when a participant switches away
-        function showSwitchBanner(name, count) {
-            // Remove existing banner if present
-            const existing = document.getElementById('switchBanner');
-            if (existing) existing.remove();
-
-            const banner = document.createElement('div');
-            banner.id = 'switchBanner';
-            banner.className = 'fixed top-4 left-1/2 -translate-x-1/2 bg-yellow-300 text-black px-4 py-2 rounded shadow z-50';
-            banner.textContent = `${name} switched away (${count} times)`;
-            document.body.appendChild(banner);
-
-            // Auto-remove after 4 seconds
-            setTimeout(() => banner.remove(), 4000);
-        }
-
         connection.on("UserSwitchedAway", (data) => {
-            // SignalR payload uses C# property names; accept either casing for robustness
-            const userName = data.UserName ?? data.userName ?? 'Unknown participant';
-            const switchCount = data.SwitchCount ?? data.switchCount ?? 0;
-
-            addActivityLog(`${userName} switched away from quiz (${switchCount} times)`);
-            showSwitchBanner(userName, switchCount);
+            addActivityLog(`?? ${data.userName} switched away from quiz (${data.switchCount} times)`);
         });
 
         connection.on("UserJoined", (user) => {

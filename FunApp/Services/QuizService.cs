@@ -15,7 +15,6 @@ namespace FunApp.Services
             "What's your favorite food?"
         };
         private int _currentQuestionIndex = -1;
-        private readonly object _lock = new();
 
         public User? GetUser(string connectionId)
         {
@@ -25,30 +24,24 @@ namespace FunApp.Services
         public User AddUser(string connectionId, string name)
         {
             var user = new User { ConnectionId = connectionId, Name = name };
-            lock (_lock)
-            {
-                _users[connectionId] = user;
-            }
+            _users[connectionId] = user;
             return user;
         }
 
         public void RemoveUser(string connectionId)
         {
-            lock (_lock)
-            {
-                _users.Remove(connectionId);
-                _answers.Remove(connectionId);
-            }
+            _users.Remove(connectionId);
+            _answers.Remove(connectionId);
         }
 
         public UserAnswer SubmitAnswer(string connectionId, string answer)
         {
             if (!_users.ContainsKey(connectionId)) return null!;
-
-            var userAnswer = new UserAnswer
-            {
-                User = _users[connectionId],
-                Answer = answer
+            
+            var userAnswer = new UserAnswer 
+            { 
+                User = _users[connectionId], 
+                Answer = answer 
             };
             _answers[connectionId] = userAnswer;
             return userAnswer;
@@ -68,29 +61,6 @@ namespace FunApp.Services
         public IEnumerable<UserAnswer> GetCurrentAnswers()
         {
             return _answers.Values;
-        }
-
-        // Increment and return the number of times the user switched away
-        public int IncrementSwitchCount(string connectionId)
-        {
-            lock (_lock)
-            {
-                if (_users.TryGetValue(connectionId, out var user))
-                {
-                    user.SwitchCount++;
-                    return user.SwitchCount;
-                }
-            }
-            return 0;
-        }
-
-        // Optional: get a snapshot of current users
-        public IEnumerable<User> GetAllUsers()
-        {
-            lock (_lock)
-            {
-                return _users.Values.ToList();
-            }
         }
     }
 }
