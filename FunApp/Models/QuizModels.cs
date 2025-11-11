@@ -12,4 +12,26 @@ namespace FunApp.Models
         public User User { get; set; } = null!;
         public string Answer { get; set; } = string.Empty;
     }
+
+    public enum GameMode
+    {
+        Individual,
+        Couple
+    }
+
+    public class QuizSession
+    {
+        public string Id { get; set; } = Guid.NewGuid().ToString();
+        public GameMode Mode { get; set; } = GameMode.Individual;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public bool IsActive { get; set; } = true;
+    }
+
+    public class Question
+    {
+        public int Id { get; set; }
+        public string Text { get; set; } = string.Empty;
+        public GameMode GameMode { get; set; } = GameMode.Individual;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    }
 }

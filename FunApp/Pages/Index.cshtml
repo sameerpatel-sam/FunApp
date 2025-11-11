@@ -4,68 +4,112 @@
     ViewData["Title"] = "Fun Quiz App";
 }
 
-<div class="container mx-auto p-6">
-    <div class="max-w-5xl mx-auto bg-white rounded-2xl shadow-lg overflow-hidden grid grid-cols-1 md:grid-cols-3">
-        <!-- Left: Host Panel -->
-        <div class="md:col-span-2 p-8 bg-gradient-to-b from-purple-600 via-pink-500 to-orange-400 text-white">
-            <div class="flex items-start justify-between">
-                <div>
-                    <h1 class="text-3xl md:text-4xl font-extrabold tracking-tight">Fun Quiz</h1>
-                    <p class="mt-2 opacity-90">Play together in real time — display a question and collect answers from everyone.</p>
-                </div>
-                <div class="text-right">
-                    <div class="text-sm opacity-90">Participants</div>
-                    <div id="participantCount" class="text-2xl font-bold">0</div>
+<div class="h-screen flex flex-col bg-gradient-to-b from-purple-600 via-pink-500 to-orange-400">
+    <!-- Top Navigation Bar -->
+    <div class="bg-black/20 backdrop-blur-sm border-b border-white/10">
+        <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+            <div class="flex items-center gap-4">
+                <h1 class="text-2xl font-extrabold text-white">Fun Quiz</h1>
+                <div class="text-sm text-white/80">
+                    Participants: <span id="participantCount" class="font-bold text-white">0</span>
                 </div>
             </div>
-
-            <div class="mt-8 bg-white/10 rounded-xl p-6">
-                <div id="questionDisplay" class="text-2xl md:text-3xl font-semibold">Waiting to start...</div>
-                <div class="mt-4 text-sm opacity-80">Tip: Press Next Question to start the fun.</div>
-
-                <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4" id="answersContainer"></div>
+            
+            <!-- Game Mode Selection -->
+            <div class="flex gap-2">
+                <button id="selectIndividual" class="px-3 py-1 bg-white text-purple-700 font-semibold rounded text-sm hover:scale-[1.05] transition">Individual Players</button>
+                <button id="selectCouple" class="px-3 py-1 bg-white/20 text-white font-semibold rounded text-sm hover:scale-[1.05] transition">Couple Players</button>
+                <a href="/Admin" class="px-3 py-1 bg-blue-600 text-white font-semibold rounded text-sm hover:scale-[1.05] transition">Manage</a>
             </div>
 
-            <div class="mt-6 flex items-center gap-4">
-                <button id="nextQuestion" class="bg-white text-purple-700 font-semibold px-5 py-3 rounded-lg shadow hover:scale-[1.02] transition">Next Question</button>
-                <button id="clearAnswers" class="bg-white/20 text-white px-4 py-2 rounded-lg hover:bg-white/30 transition">Clear Answers</button>
-                <button id="showResults" class="bg-green-500 text-white font-semibold px-5 py-3 rounded-lg shadow hover:scale-[1.02] transition">Show Results</button>
+            <!-- Menu Toggle -->
+            <button id="menuToggle" class="px-4 py-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition">
+                ? Menu
+            </button>
+        </div>
+    </div>
+
+    <!-- Main Quiz Area (Full Screen) -->
+    <div class="flex-1 flex items-center justify-center p-6 overflow-hidden">
+        <div class="w-full max-w-4xl">
+            <!-- Question Display -->
+            <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-8 mb-6 border border-white/20">
+                <div id="questionDisplay" class="text-4xl md:text-5xl font-bold text-white text-center leading-tight">
+                    Waiting to start...
+                </div>
+                <div class="mt-4 text-center text-white/80">Press Next Question to begin</div>
             </div>
 
-            <!-- Results Section -->
-            <div id="resultsSection" class="hidden mt-8 bg-white/10 rounded-xl p-6">
-                <h2 class="text-2xl font-bold mb-4">Quiz Results</h2>
-                <div id="resultsList" class="space-y-4"></div>
-            </div>
+            <!-- Answers Display -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6" id="answersContainer"></div>
 
-            <!-- Activity Log -->
-            <div class="mt-6 bg-white/10 rounded-lg p-4">
-                <h3 class="text-sm font-semibold mb-2">Activity Log</h3>
-                <div id="activityLog" class="text-sm space-y-1 max-h-32 overflow-y-auto"></div>
+            <!-- Control Buttons -->
+            <div class="flex flex-wrap items-center justify-center gap-3">
+                <button id="nextQuestion" class="px-6 py-3 bg-white text-purple-700 font-bold rounded-lg shadow-lg hover:scale-[1.05] transition text-lg">
+                    ? Next Question
+                </button>
+                <button id="revealAnswers" class="px-6 py-3 bg-blue-500 text-white font-bold rounded-lg shadow-lg hover:scale-[1.05] transition text-lg">
+                    ??? Reveal Answers
+                </button>
+                <button id="showResults" class="px-6 py-3 bg-yellow-500 text-white font-bold rounded-lg shadow-lg hover:scale-[1.05] transition text-lg">
+                    ?? Show Results
+                </button>
+                <button id="clearAnswers" class="px-6 py-3 bg-white/20 text-white font-bold rounded-lg hover:bg-white/30 transition text-lg">
+                    ??? Clear
+                </button>
             </div>
         </div>
+    </div>
 
-        <!-- Right: Join Info Panel -->
-        <div class="p-6 bg-slate-50">
-            <div class="bg-white rounded-xl p-6 shadow">
-                <h3 class="text-lg font-semibold">Join this quiz</h3>
-                <p class="text-sm text-slate-600 mt-2">Share this link with participants so they can join on their phones.</p>
+    <!-- Side Menu -->
+    <div id="sideMenu" class="hidden fixed right-0 top-0 h-screen w-80 bg-white shadow-2xl z-40 flex flex-col">
+        <div class="bg-gradient-to-r from-purple-600 to-pink-500 p-6 flex justify-between items-center">
+            <h2 class="text-xl font-bold text-white">Menu</h2>
+            <button id="menuClose" class="text-white text-2xl hover:scale-[1.2] transition">?</button>
+        </div>
 
-                <div class="mt-4 flex gap-2">
-                    <input id="joinUrl" type="text" readonly class="flex-1 p-3 rounded-lg border border-slate-200 text-sm" value="@Model.JoinUrl" />
-                    <button onclick="copyJoinUrl()" class="px-4 py-2 bg-purple-600 text-white rounded-lg">Copy</button>
-                </div>
+        <!-- Activity Log Section -->
+        <div class="flex-1 p-6 overflow-y-auto border-b">
+            <h3 class="text-lg font-bold text-slate-800 mb-4">?? Activity Log</h3>
+            <div id="activityLog" class="space-y-2 text-sm"></div>
+        </div>
 
-                <div class="mt-6">
-                    <h4 class="text-sm font-medium text-slate-700">Quick Controls</h4>
-                    <div class="mt-3 grid grid-cols-1 gap-2">
-                        <button id="generateLink" class="w-full py-2 rounded-md border border-dashed border-slate-200 text-sm">Generate User Link</button>
-                        <button id="viewParticipants" class="w-full py-2 rounded-md bg-slate-100 text-sm">View Participants</button>
-                    </div>
-                </div>
-
-                <div id="generatedLinks" class="mt-4 text-sm text-slate-600"></div>
+        <!-- Join Info Section -->
+        <div class="p-6 bg-slate-50 border-t">
+            <h3 class="text-lg font-bold text-slate-800 mb-4">?? Join This Quiz</h3>
+            <p class="text-sm text-slate-600 mb-3">Share this link with participants:</p>
+            
+            <div class="flex gap-2 mb-4">
+                <input id="joinUrl" type="text" readonly class="flex-1 p-2 border border-slate-300 rounded text-sm" value="@Model.JoinUrl" />
+                <button onclick="copyJoinUrl()" class="px-3 py-2 bg-purple-600 text-white rounded font-semibold text-sm hover:bg-purple-700">
+                    Copy
+                </button>
             </div>
+
+            <div class="space-y-2 mb-4">
+                <button id="viewParticipants" class="w-full py-2 bg-blue-100 text-blue-700 rounded font-semibold text-sm hover:bg-blue-200">
+                    ?? View Participants
+                </button>
+                <button id="generateLink" class="w-full py-2 bg-green-100 text-green-700 rounded font-semibold text-sm hover:bg-green-200">
+                    ?? Generate Link
+                </button>
+            </div>
+
+            <div id="generatedLinks" class="text-xs text-slate-600 space-y-1"></div>
+        </div>
+    </div>
+
+    <!-- Menu Overlay -->
+    <div id="menuOverlay" class="hidden fixed inset-0 bg-black/30 z-30"></div>
+
+    <!-- Results Modal -->
+    <div id="resultsModal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div class="sticky top-0 bg-gradient-to-r from-purple-600 to-pink-500 p-6 flex justify-between items-center">
+                <h2 class="text-2xl font-bold text-white">Quiz Results</h2>
+                <button onclick="closeResults()" class="text-white text-2xl hover:scale-[1.2] transition">?</button>
+            </div>
+            <div id="resultsList" class="p-6 space-y-4"></div>
         </div>
     </div>
 </div>
@@ -79,167 +123,246 @@
             .build();
 
         let participants = {};
+        let maxActivityLogEntries = 20;
+
+        // Menu Toggle Functions
+        function openMenu() {
+            document.getElementById("sideMenu").classList.remove("hidden");
+            document.getElementById("menuOverlay").classList.remove("hidden");
+        }
+
+        function closeMenu() {
+            document.getElementById("sideMenu").classList.add("hidden");
+            document.getElementById("menuOverlay").classList.add("hidden");
+        }
+
+        document.getElementById("menuToggle").addEventListener("click", openMenu);
+        document.getElementById("menuClose").addEventListener("click", closeMenu);
+        document.getElementById("menuOverlay").addEventListener("click", closeMenu);
+
+        // Results Modal Functions
+        function openResults() {
+            document.getElementById("resultsModal").classList.remove("hidden");
+        }
+
+        function closeResults() {
+            document.getElementById("resultsModal").classList.add("hidden");
+        }
 
         // Activity log handling
         function addActivityLog(message) {
             const log = document.getElementById('activityLog');
             const entry = document.createElement('div');
-            entry.className = 'py-1 border-b border-white/10';
+            entry.className = 'p-2 bg-slate-100 rounded text-slate-700 text-xs';
             entry.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
             log.insertBefore(entry, log.firstChild);
+            
+            // Keep only last 20 entries
+            while (log.children.length > maxActivityLogEntries) {
+                log.removeChild(log.lastChild);
+            }
         }
 
-        // Show a temporary banner on the host screen when a participant switches away
+        // SignalR Event Handlers
+        connection.on("UserSwitchedAway", (data) => {
+            const userName = data.UserName ?? data.userName ?? 'Unknown';
+            const switchCount = data.SwitchCount ?? data.switchCount ?? 0;
+            addActivityLog(`?? ${userName} switched away (${switchCount}x)`);
+            
+            // Show flashing banner on host screen
+            showSwitchBanner(userName, switchCount);
+        });
+
+        // Show a temporary flashing banner when user switches away
         function showSwitchBanner(name, count) {
-            // Remove existing banner if present
             const existing = document.getElementById('switchBanner');
             if (existing) existing.remove();
 
             const banner = document.createElement('div');
             banner.id = 'switchBanner';
-            banner.className = 'fixed top-4 left-1/2 -translate-x-1/2 bg-yellow-300 text-black px-4 py-2 rounded shadow z-50';
-            banner.textContent = `${name} switched away (${count} times)`;
+            banner.className = 'fixed top-20 left-1/2 -translate-x-1/2 bg-yellow-400 text-black px-6 py-3 rounded-lg shadow-lg z-50 font-semibold animate-pulse';
+            banner.textContent = `?? ${name} switched away (${count}x)`;
             document.body.appendChild(banner);
 
             // Auto-remove after 4 seconds
             setTimeout(() => banner.remove(), 4000);
         }
 
-        connection.on("UserSwitchedAway", (data) => {
-            // SignalR payload uses C# property names; accept either casing for robustness
-            const userName = data.UserName ?? data.userName ?? 'Unknown participant';
-            const switchCount = data.SwitchCount ?? data.switchCount ?? 0;
-
-            addActivityLog(`${userName} switched away from quiz (${switchCount} times)`);
-            showSwitchBanner(userName, switchCount);
-        });
-
         connection.on("UserJoined", (user) => {
             participants[user.connectionId] = user;
             document.getElementById('participantCount').textContent = Object.keys(participants).length;
-            addActivityLog(`?? ${user.name} joined the quiz`);
+            addActivityLog(`? ${user.name} joined`);
         });
 
         connection.on("AnswerReceived", (userAnswer) => {
-            const answersContainer = document.getElementById("answersContainer");
-
-            const card = document.createElement('div');
-            card.className = 'bg-white/90 p-4 rounded-lg shadow-sm';
-            card.innerHTML = `
-                <div class="font-semibold text-purple-700">${userAnswer.user.name}</div>
-                <div class="mt-1 text-sm text-slate-700">${userAnswer.answer}</div>
-            `;
-
-            answersContainer.appendChild(card);
+            console.log("Answer received from:", userAnswer.user.name, "-", userAnswer.answer);
         });
 
         connection.on("NewQuestion", (question) => {
             document.getElementById("questionDisplay").textContent = question;
             document.getElementById("answersContainer").innerHTML = "";
-            document.getElementById("resultsSection").classList.add("hidden");
+            addActivityLog(`? New question asked`);
         });
 
-        connection.on("QuizResults", (data) => {
-            console.log("QuizResults event received");
-            console.log("Full data object:", data);
-            
+        connection.on("GameModeChanged", (mode) => {
+            addActivityLog(`?? Mode: ${mode}`);
+        });
+
+        connection.on("QuizEnded", (results) => {
             const resultsList = document.getElementById("resultsList");
             resultsList.innerHTML = "";
 
-            // Handle both Results (from C#) and results (from JSON serialization)
-            const results = data?.Results || data?.results || [];
-            console.log("Results array to process:", results);
-            
-            // Log first result to see property names
-            if (results.length > 0) {
-                console.log("First result object:", results[0]);
-                console.log("First result keys:", Object.keys(results[0]));
-            }
-
-            if (!results || results.length === 0) {
-                console.log("No results to display");
-                resultsList.innerHTML = '<p class="text-gray-500">No participants or results</p>';
-                document.getElementById("resultsSection").classList.remove("hidden");
-                return;
-            }
-
-            results.forEach((result, idx) => {
-                console.log(`Processing result ${idx}:`, result);
-                const resultCard = document.createElement('div');
-                resultCard.className = 'bg-white/90 p-4 rounded-lg';
-                
-                // Handle property name variations (name vs Name)
-                const name = result.Name || result.name || 'Unknown';
-                const switchCount = result.SwitchCount !== undefined ? result.SwitchCount : (result.switchCount || 0);
-                
-                let answersHtml = '';
-                if (result.Answers && result.Answers.length > 0) {
-                    answersHtml = result.Answers.map((a, aIdx) => {
-                        console.log(`  Answer ${aIdx}:`, a);
-                        return `<p class="text-sm text-slate-600">Q${aIdx + 1}: ${a.Answer || JSON.stringify(a)}</p>`;
-                    }).join('');
-                }
-
-                resultCard.innerHTML = `
-                    <div class="font-bold text-purple-700 mb-2">${name}</div>
-                    <div class="text-xs text-orange-600 mb-2">Tab switches: ${switchCount}</div>
-                    <div class="text-sm">${answersHtml || '<p class="text-gray-500">No answers submitted</p>'}</div>
+            results.forEach(result => {
+                const resultItem = document.createElement('div');
+                resultItem.className = 'p-4 bg-white rounded-lg shadow-md';
+                resultItem.innerHTML = `
+                    <div class="font-bold text-lg">${result.user.name}</div>
+                    <div class="text-sm text-gray-500">Score: ${result.score}</div>
+                    <div class="mt-2 text-sm">${result.answers.map(ans => `<div>${ans.question}: ${ans.userAnswer} (${ans.correct ? 'Correct' : 'Wrong'})</div>`).join('')}</div>
                 `;
-                resultsList.appendChild(resultCard);
+                resultsList.appendChild(resultItem);
             });
 
-            document.getElementById("resultsSection").classList.remove("hidden");
-            addActivityLog("?? Quiz results displayed");
-            console.log("Results display complete");
+            document.getElementById("resultsModal").classList.remove("hidden");
         });
 
+        // Button Handlers
         document.getElementById("nextQuestion").addEventListener("click", () => {
-            connection.invoke("NextQuestion");
+            connection.invoke("NextQuestion").catch(err => console.error(err));
         });
 
         document.getElementById("clearAnswers").addEventListener("click", () => {
             document.getElementById("answersContainer").innerHTML = "";
+            addActivityLog("??? Answers cleared");
+        });
+
+        document.getElementById("revealAnswers").addEventListener("click", () => {
+            connection.invoke("GetCurrentAnswers")
+                .then(answers => {
+                    const answersContainer = document.getElementById("answersContainer");
+                    answersContainer.innerHTML = "";
+                    
+                    if (!answers || answers.length === 0) {
+                        answersContainer.innerHTML = '<p class="text-white text-center col-span-full">No answers yet</p>';
+                        addActivityLog("??? Revealed: No answers");
+                        return;
+                    }
+                    
+                    answers.forEach(answer => {
+                        const card = document.createElement('div');
+                        card.className = 'bg-white/90 p-4 rounded-lg shadow-sm backdrop-blur-sm animate-bounce';
+                        card.innerHTML = `
+                            <div class="font-semibold text-purple-700">${answer.user.name}</div>
+                            <div class="mt-1 text-sm text-slate-700 break-words">${answer.answer}</div>
+                        `;
+                        answersContainer.appendChild(card);
+                    });
+                    
+                    addActivityLog(`??? Revealed ${answers.length} answers`);
+                })
+                .catch(err => console.error(err));
+        });
+
+        document.getElementById("selectIndividual").addEventListener("click", () => {
+            connection.invoke("SetGameMode", "Individual").then(() => {
+                document.getElementById("selectIndividual").classList.add("bg-white", "text-purple-700");
+                document.getElementById("selectIndividual").classList.remove("bg-white/20", "text-white");
+                document.getElementById("selectCouple").classList.remove("bg-white", "text-purple-700");
+                document.getElementById("selectCouple").classList.add("bg-white/20", "text-white");
+            }).catch(err => console.error(err));
+        });
+
+        document.getElementById("selectCouple").addEventListener("click", () => {
+            connection.invoke("SetGameMode", "Couple").then(() => {
+                document.getElementById("selectCouple").classList.add("bg-white", "text-pink-700");
+                document.getElementById("selectCouple").classList.remove("bg-white/20", "text-white");
+                document.getElementById("selectIndividual").classList.remove("bg-white", "text-purple-700");
+                document.getElementById("selectIndividual").classList.add("bg-white/20", "text-white");
+            }).catch(err => console.error(err));
         });
 
         document.getElementById("generateLink").addEventListener("click", () => {
-            // simple uuid generator
-            const id = ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c => (
-                c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4
-            ).toString(16));
-
+            const id = ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c => (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16));
             const link = `${window.location.origin}/join/${id}`;
             const container = document.getElementById('generatedLinks');
             const el = document.createElement('div');
-            el.className = 'mt-2 text-xs text-slate-600';
+            el.className = 'p-2 bg-green-100 rounded text-xs text-green-800 break-all';
             el.textContent = link;
-            container.appendChild(el);
+            container.insertBefore(el, container.firstChild);
         });
 
         document.getElementById("viewParticipants").addEventListener("click", () => {
-            alert(`Participants:\n${Object.values(participants).map(p => p.name).join('\n')}` || 'No participants');
+            const names = Object.values(participants).map(p => p.name).join('\n');
+            alert(`Participants (${Object.keys(participants).length}):\n${names || 'None yet'}`);
         });
 
         document.getElementById("showResults").addEventListener("click", () => {
-            console.log("Show Results button clicked");
-            console.log("Connection state:", connection.state);
-            connection.invoke("ShowResults")
-                .then(() => {
-                    console.log("ShowResults invoked successfully");
+            connection.invoke("GetAllUserAnswers")
+                .then(results => {
+                    const resultsList = document.getElementById("resultsList");
+                    resultsList.innerHTML = "";
+                    
+                    if (!results || results.length === 0) {
+                        resultsList.innerHTML = '<p class="text-gray-500 text-center py-8">No results yet</p>';
+                        openResults();
+                        return;
+                    }
+                    
+                    results.forEach(result => {
+                        const name = result.Name || result.name || 'Unknown';
+                        const switchCount = result.SwitchCount || result.switchCount || 0;
+                        const answersList = result.Answers || result.answers || [];
+                        
+                        console.log(`Displaying results for ${name}:`, answersList);
+                        
+                        let answersHtml = '';
+                        if (answersList && answersList.length > 0) {
+                            answersHtml = answersList.map((a, idx) => {
+                                // Handle both direct string answers and object answers
+                                let answerText = '';
+                                if (typeof a === 'string') {
+                                    answerText = a;
+                                } else if (typeof a === 'object' && a !== null) {
+                                    answerText = a.Answer || a.answer || JSON.stringify(a);
+                                } else {
+                                    answerText = String(a);
+                                }
+                                return `<p class="text-sm text-slate-600">Q${idx + 1}: <span class="font-semibold">${answerText}</span></p>`;
+                            }).join('');
+                        }
+                        
+                        const resultCard = document.createElement('div');
+                        resultCard.className = 'p-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border border-purple-200';
+                        resultCard.innerHTML = `
+                            <div class="flex justify-between items-start mb-2">
+                                <div class="font-bold text-lg text-purple-700">${name}</div>
+                                <div class="text-xs bg-orange-200 text-orange-800 px-2 py-1 rounded">?? ${switchCount} switches</div>
+                            </div>
+                            <div class="text-sm space-y-1">${answersHtml || '<p class="text-gray-500">No answers submitted</p>'}</div>
+                        `;
+                        resultsList.appendChild(resultCard);
+                    });
+                    
+                    openResults();
+                    addActivityLog("?? Results displayed");
                 })
                 .catch(err => {
-                    console.error("ShowResults error:", err);
-                    alert("Error showing results: " + err.message);
+                    console.error("Error fetching results:", err);
+                    addActivityLog("? Error displaying results");
                 });
         });
 
-        // Register all connection event handlers BEFORE starting
-        console.log("Registering connection event handlers...");
-        connection.start()
-            .then(() => {
-                console.log("SignalR connection started successfully");
-            })
-            .catch(err => {
-                console.error("Failed to start SignalR connection:", err);
-            });
+        function copyJoinUrl() {
+            const joinUrl = document.getElementById("joinUrl");
+            joinUrl.select();
+            document.execCommand("copy");
+            alert("Link copied!");
+        }
+
+        function closeResults() {
+            document.getElementById("resultsModal").classList.add("hidden");
+        }
+
+        connection.start().catch(err => console.error(err));
     </script>
-}}
+}

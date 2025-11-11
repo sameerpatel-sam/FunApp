@@ -1,0 +1,100 @@
+@page
+@model FunApp.Pages.Admin.IndexModel
+@{
+    ViewData["Title"] = "Manage Quiz";
+}
+
+<div class="min-h-screen bg-gradient-to-b from-purple-700 via-pink-600 to-orange-500 p-6 text-white">
+    <div class="max-w-6xl mx-auto space-y-10">
+        <div class="flex justify-between items-center">
+            <h1 class="text-3xl font-extrabold">Quiz Management</h1>
+            <a asp-page="/Index" class="px-4 py-2 bg-black/30 hover:bg-black/50 rounded-lg text-sm font-semibold">? Close</a>
+        </div>
+
+        <div class="grid lg:grid-cols-2 gap-8">
+            <!-- Individual Questions -->
+            <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
+                <h2 class="text-xl font-bold mb-4">Individual Game Questions</h2>
+                <form method="post" asp-page-handler="Add" class="flex gap-2 mb-4">
+                    <input type="hidden" name="mode" value="individual" />
+                    <input name="text" placeholder="New question" class="flex-1 rounded px-3 py-2 text-black" />
+                    <button class="px-4 py-2 bg-white text-purple-700 font-semibold rounded">Add</button>
+                </form>
+                <div class="space-y-3 max-h-72 overflow-y-auto pr-2">
+                    @foreach (var q in Model.IndividualQuestions)
+                    {
+                        <form method="post" asp-page-handler="Update" class="flex gap-2 items-start bg-white/5 p-2 rounded">
+                            <input type="hidden" name="id" value="@q.Id" />
+                            <textarea name="text" rows="2" class="flex-1 rounded px-2 py-1 text-black">@q.Text</textarea>
+                            <div class="flex flex-col gap-1">
+                                <button class="px-3 py-1 bg-yellow-300 text-yellow-900 rounded text-xs">Update</button>
+                                <button formaction="?handler=Delete" name="id" value="@q.Id" class="px-3 py-1 bg-red-600 text-white rounded text-xs">Delete</button>
+                            </div>
+                        </form>
+                    }
+                </div>
+            </div>
+
+            <!-- Couple Questions -->
+            <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
+                <h2 class="text-xl font-bold mb-4">Couple Game Questions</h2>
+                <form method="post" asp-page-handler="Add" class="flex gap-2 mb-4">
+                    <input type="hidden" name="mode" value="couple" />
+                    <input name="text" placeholder="New question" class="flex-1 rounded px-3 py-2 text-black" />
+                    <button class="px-4 py-2 bg-white text-pink-700 font-semibold rounded">Add</button>
+                </form>
+                <div class="space-y-3 max-h-72 overflow-y-auto pr-2">
+                    @foreach (var q in Model.CoupleQuestions)
+                    {
+                        <form method="post" asp-page-handler="Update" class="flex gap-2 items-start bg-white/5 p-2 rounded">
+                            <input type="hidden" name="id" value="@q.Id" />
+                            <textarea name="text" rows="2" class="flex-1 rounded px-2 py-1 text-black">@q.Text</textarea>
+                            <div class="flex flex-col gap-1">
+                                <button class="px-3 py-1 bg-yellow-300 text-yellow-900 rounded text-xs">Update</button>
+                                <button formaction="?handler=Delete" name="id" value="@q.Id" class="px-3 py-1 bg-red-600 text-white rounded text-xs">Delete</button>
+                            </div>
+                        </form>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
+            <h2 class="text-xl font-bold mb-4">Host Controls</h2>
+            <div class="flex flex-wrap gap-3">
+                <button id="nextQuestion" class="px-4 py-2 bg-white text-purple-700 font-semibold rounded">Next Question</button>
+                <button id="showResults" class="px-4 py-2 bg-yellow-400 text-yellow-900 font-semibold rounded">Show Results</button>
+                <button id="endQuiz" class="px-4 py-2 bg-red-600 text-white font-semibold rounded">End Quiz</button>
+                <button id="refreshLists" class="px-4 py-2 bg-blue-500 text-white font-semibold rounded">Refresh Lists</button>
+            </div>
+            <p class="text-xs mt-3 text-white/70">Note: Lists auto refresh on navigation. Use Refresh to reload without leaving the page.</p>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    @Html.Raw("<script src=\"https://cdn.jsdelivr.net/npm/@microsoft/signalr@8/dist/browser/signalr.js\"></script>")
+    <script>
+        const connection = new signalR.HubConnectionBuilder()
+            .withUrl("/quizHub")
+            .withAutomaticReconnect()
+            .build();
+
+        document.getElementById("nextQuestion").addEventListener("click", () => {
+            connection.invoke("NextQuestion").catch(console.error);
+        });
+        document.getElementById("showResults").addEventListener("click", () => {
+            connection.invoke("GetAllUserAnswers")
+                .then(_ => alert("Results fetched. Open the host screen to view."))
+                .catch(console.error);
+        });
+        document.getElementById("endQuiz").addEventListener("click", () => {
+            connection.invoke("EndQuiz").catch(console.error);
+        });
+        document.getElementById("refreshLists").addEventListener("click", () => {
+            window.location.reload();
+        });
+
+        connection.start().catch(console.error);
+    </script>
+}

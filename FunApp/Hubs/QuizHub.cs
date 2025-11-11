@@ -21,7 +21,6 @@ namespace FunApp.Hubs
             
             if (user == null)
             {
-                // User already joined with this name
                 await Clients.Caller.SendAsync("JoinFailed", "This username is already in the quiz. Please use a different name.");
                 _logger.LogWarning("Join attempt failed: username '{UserName}' already in quiz", userName);
                 return;
@@ -37,22 +36,20 @@ namespace FunApp.Hubs
             await Clients.All.SendAsync("AnswerReceived", userAnswer);
         }
 
-        // ReportVisibilityChange no longer trusts client-provided counts; increment on the server
-        public async Task ReportVisibilityChange(int _ignoredSwitchCount)
+        public async Task ReportVisibilityChange(int switchCount)
         {
             var user = _quizService.GetUser(Context.ConnectionId);
             if (user != null)
             {
                 var newCount = _quizService.IncrementSwitchCount(Context.ConnectionId);
-
-                _logger.LogWarning("User {UserName} switched away from quiz. Server switch count: {SwitchCount}",
+                
+                _logger.LogWarning("User {UserName} switched away from quiz. Server switch count: {SwitchCount}", 
                     user.Name, newCount);
-
-                // Notify quiz host about the switch with server-side count
-                await Clients.Others.SendAsync("UserSwitchedAway", new
-                {
-                    UserName = user.Name,
-                    SwitchCount = newCount
+                
+                // Notify quiz host about the switch
+                await Clients.Others.SendAsync("UserSwitchedAway", new { 
+                    UserName = user.Name, 
+                    SwitchCount = newCount 
                 });
             }
         }
@@ -64,26 +61,32 @@ namespace FunApp.Hubs
             await Clients.All.SendAsync("NewQuestion", question);
         }
 
-        // New method: Display quiz results/summary
-        public async Task ShowResults()
+        public Task<List<dynamic>> GetCurrentAnswers()
+        {
+            var answers = _quizService.GetCurrentAnswers();
+            return Task.FromResult(answers.Select(a => new { a.User, a.Answer }).Cast<dynamic>().ToList());
+        }
+
+        public Task<List<dynamic>> GetAllUserAnswers()
         {
             var allUsers = _quizService.GetAllUsers();
             var userAnswersDict = _quizService.GetAllUserAnswers();
 
             var results = allUsers.Select(user => 
             {
-                List<object> answers = new();
-                
-                // Get answers for this user
+                List<object> answers;
                 if (userAnswersDict.ContainsKey(user.ConnectionId))
                 {
-                    var userAnswers = userAnswersDict[user.ConnectionId];
-                    answers = userAnswers
-                        .Select(answer => (object)new { Answer = answer })
+                    answers = userAnswersDict[user.ConnectionId]
+                        .Select(a => (object)new { Answer = a })
                         .ToList();
                 }
+                else
+                {
+                    answers = new List<object>();
+                }
 
-                return new
+                return (object)new
                 {
                     user.Name,
                     user.SwitchCount,
@@ -91,19 +94,55 @@ namespace FunApp.Hubs
                 };
             }).ToList();
 
-            _logger.LogInformation("ShowResults: Sending {ParticipantCount} participants with results", results.Count);
-            foreach (var r in results)
+            return Task.FromResult(results.Cast<dynamic>().ToList());
+        }
+
+        public async Task SetGameMode(string mode)
+        {
+            if (Enum.TryParse<GameMode>(mode, out var gameMode))
             {
-                _logger.LogInformation("  {Name}: {AnswerCount} answers", r.Name, r.Answers.Count);
+                _quizService.SetGameMode(gameMode);
+                await Clients.All.SendAsync("GameModeChanged", mode);
+                _logger.LogInformation("Game mode set to: {GameMode}", mode);
             }
+        }
 
-            await Clients.All.SendAsync("QuizResults", new
+        public Task<List<Question>> GetQuestions(string mode)
+        {
+            if (Enum.TryParse<GameMode>(mode, out var gameMode))
             {
-                Results = results,
-                TotalQuestions = _quizService.GetCurrentQuestionNumber()
-            });
+                return Task.FromResult(_quizService.GetQuestionsByMode(gameMode));
+            }
+            return Task.FromResult(new List<Question>());
+        }
 
-            _logger.LogInformation("Quiz results displayed with {ParticipantCount} participants", results.Count);
+        public async Task AddQuestion(string text, string mode)
+        {
+            if (Enum.TryParse<GameMode>(mode, out var gameMode))
+            {
+                _quizService.AddQuestion(text, gameMode);
+                var questions = _quizService.GetQuestionsByMode(gameMode);
+                await Clients.All.SendAsync("QuestionsUpdated", gameMode.ToString(), questions);
+                _logger.LogInformation("Question added: {Text}", text);
+            }
+        }
+
+        public async Task UpdateQuestion(int id, string text)
+        {
+            _quizService.UpdateQuestion(id, text);
+            var gameMode = _quizService.GetGameMode();
+            var questions = _quizService.GetQuestionsByMode(gameMode);
+            await Clients.All.SendAsync("QuestionsUpdated", gameMode.ToString(), questions);
+            _logger.LogInformation("Question {Id} updated", id);
+        }
+
+        public async Task DeleteQuestion(int id)
+        {
+            _quizService.DeleteQuestion(id);
+            var gameMode = _quizService.GetGameMode();
+            var questions = _quizService.GetQuestionsByMode(gameMode);
+            await Clients.All.SendAsync("QuestionsUpdated", gameMode.ToString(), questions);
+            _logger.LogInformation("Question {Id} deleted", id);
         }
 
         public override async Task OnDisconnectedAsync(Exception? exception)
