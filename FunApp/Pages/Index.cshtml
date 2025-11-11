@@ -29,6 +29,13 @@
             <div class="mt-6 flex items-center gap-4">
                 <button id="nextQuestion" class="bg-white text-purple-700 font-semibold px-5 py-3 rounded-lg shadow hover:scale-[1.02] transition">Next Question</button>
                 <button id="clearAnswers" class="bg-white/20 text-white px-4 py-2 rounded-lg hover:bg-white/30 transition">Clear Answers</button>
+                <button id="showResults" class="bg-green-500 text-white font-semibold px-5 py-3 rounded-lg shadow hover:scale-[1.02] transition">Show Results</button>
+            </div>
+
+            <!-- Results Section -->
+            <div id="resultsSection" class="hidden mt-8 bg-white/10 rounded-xl p-6">
+                <h2 class="text-2xl font-bold mb-4">Quiz Results</h2>
+                <div id="resultsList" class="space-y-4"></div>
             </div>
 
             <!-- Activity Log -->
@@ -64,7 +71,7 @@
 </div>
 
 @section Scripts {
-    <script src="~/js/signalr/dist/browser/signalr.js"></script>
+    @Html.Raw("<script src=\"https://cdn.jsdelivr.net/npm/@microsoft/signalr@8/dist/browser/signalr.js\"></script>")
     <script>
         const connection = new signalR.HubConnectionBuilder()
             .withUrl("/quizHub")
@@ -82,8 +89,29 @@
             log.insertBefore(entry, log.firstChild);
         }
 
+        // Show a temporary banner on the host screen when a participant switches away
+        function showSwitchBanner(name, count) {
+            // Remove existing banner if present
+            const existing = document.getElementById('switchBanner');
+            if (existing) existing.remove();
+
+            const banner = document.createElement('div');
+            banner.id = 'switchBanner';
+            banner.className = 'fixed top-4 left-1/2 -translate-x-1/2 bg-yellow-300 text-black px-4 py-2 rounded shadow z-50';
+            banner.textContent = `${name} switched away (${count} times)`;
+            document.body.appendChild(banner);
+
+            // Auto-remove after 4 seconds
+            setTimeout(() => banner.remove(), 4000);
+        }
+
         connection.on("UserSwitchedAway", (data) => {
-            addActivityLog(`?? ${data.userName} switched away from quiz (${data.switchCount} times)`);
+            // SignalR payload uses C# property names; accept either casing for robustness
+            const userName = data.UserName ?? data.userName ?? 'Unknown participant';
+            const switchCount = data.SwitchCount ?? data.switchCount ?? 0;
+
+            addActivityLog(`${userName} switched away from quiz (${switchCount} times)`);
+            showSwitchBanner(userName, switchCount);
         });
 
         connection.on("UserJoined", (user) => {
@@ -108,6 +136,61 @@
         connection.on("NewQuestion", (question) => {
             document.getElementById("questionDisplay").textContent = question;
             document.getElementById("answersContainer").innerHTML = "";
+            document.getElementById("resultsSection").classList.add("hidden");
+        });
+
+        connection.on("QuizResults", (data) => {
+            console.log("QuizResults event received");
+            console.log("Full data object:", data);
+            
+            const resultsList = document.getElementById("resultsList");
+            resultsList.innerHTML = "";
+
+            // Handle both Results (from C#) and results (from JSON serialization)
+            const results = data?.Results || data?.results || [];
+            console.log("Results array to process:", results);
+            
+            // Log first result to see property names
+            if (results.length > 0) {
+                console.log("First result object:", results[0]);
+                console.log("First result keys:", Object.keys(results[0]));
+            }
+
+            if (!results || results.length === 0) {
+                console.log("No results to display");
+                resultsList.innerHTML = '<p class="text-gray-500">No participants or results</p>';
+                document.getElementById("resultsSection").classList.remove("hidden");
+                return;
+            }
+
+            results.forEach((result, idx) => {
+                console.log(`Processing result ${idx}:`, result);
+                const resultCard = document.createElement('div');
+                resultCard.className = 'bg-white/90 p-4 rounded-lg';
+                
+                // Handle property name variations (name vs Name)
+                const name = result.Name || result.name || 'Unknown';
+                const switchCount = result.SwitchCount !== undefined ? result.SwitchCount : (result.switchCount || 0);
+                
+                let answersHtml = '';
+                if (result.Answers && result.Answers.length > 0) {
+                    answersHtml = result.Answers.map((a, aIdx) => {
+                        console.log(`  Answer ${aIdx}:`, a);
+                        return `<p class="text-sm text-slate-600">Q${aIdx + 1}: ${a.Answer || JSON.stringify(a)}</p>`;
+                    }).join('');
+                }
+
+                resultCard.innerHTML = `
+                    <div class="font-bold text-purple-700 mb-2">${name}</div>
+                    <div class="text-xs text-orange-600 mb-2">Tab switches: ${switchCount}</div>
+                    <div class="text-sm">${answersHtml || '<p class="text-gray-500">No answers submitted</p>'}</div>
+                `;
+                resultsList.appendChild(resultCard);
+            });
+
+            document.getElementById("resultsSection").classList.remove("hidden");
+            addActivityLog("?? Quiz results displayed");
+            console.log("Results display complete");
         });
 
         document.getElementById("nextQuestion").addEventListener("click", () => {
@@ -136,13 +219,27 @@
             alert(`Participants:\n${Object.values(participants).map(p => p.name).join('\n')}` || 'No participants');
         });
 
-        function copyJoinUrl() {
-            const joinUrl = document.getElementById("joinUrl");
-            joinUrl.select();
-            document.execCommand("copy");
-            alert("Join URL copied to clipboard!");
-        }
+        document.getElementById("showResults").addEventListener("click", () => {
+            console.log("Show Results button clicked");
+            console.log("Connection state:", connection.state);
+            connection.invoke("ShowResults")
+                .then(() => {
+                    console.log("ShowResults invoked successfully");
+                })
+                .catch(err => {
+                    console.error("ShowResults error:", err);
+                    alert("Error showing results: " + err.message);
+                });
+        });
 
-        connection.start().catch(console.error);
+        // Register all connection event handlers BEFORE starting
+        console.log("Registering connection event handlers...");
+        connection.start()
+            .then(() => {
+                console.log("SignalR connection started successfully");
+            })
+            .catch(err => {
+                console.error("Failed to start SignalR connection:", err);
+            });
     </script>
-}
+}}

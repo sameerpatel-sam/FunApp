@@ -39,8 +39,8 @@ if (!builder.Environment.IsDevelopment() && !runningInContainer)
     app.UseHsts();
 }
 
-// Do not force HTTPS when running in a container that only exposes HTTP
-if (!runningInContainer)
+// Do not force HTTPS when running in a container or in development
+if (!runningInContainer && !builder.Environment.IsDevelopment())
 {
     app.UseHttpsRedirection();
 }
@@ -50,10 +50,10 @@ app.UseStaticFiles();
 // Add security headers
 app.Use(async (context, next) =>
 {
-    context.Response.Headers.Add("X-Content-Type-Options", "nosniff");
-    context.Response.Headers.Add("X-Frame-Options", "DENY");
-    context.Response.Headers.Add("X-XSS-Protection", "1; mode=block");
-    context.Response.Headers.Add("Referrer-Policy", "strict-origin-when-cross-origin");
+    context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+    context.Response.Headers["X-Frame-Options"] = "DENY";
+    context.Response.Headers["X-XSS-Protection"] = "1; mode=block";
+    context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
     await next();
 });
 
@@ -64,6 +64,19 @@ app.MapHub<QuizHub>("/quizHub");
 
 // Health endpoint for Replit / load balancers
 app.MapGet("/health", () => Results.Ok("OK"));
+app.MapGet("/debug/quiz-state", (QuizService quizService) => 
+{
+    var users = quizService.GetAllUsers();
+    var allAnswers = quizService.GetAllUserAnswers();
+    var currentAnswers = quizService.GetCurrentAnswers();
+    
+    return new
+    {
+        Users = users.Select(u => new { u.Name, u.ConnectionId, u.SwitchCount }).ToList(),
+        AllAnswersPerUser = allAnswers,
+        CurrentAnswers = currentAnswers.Select(a => new { a.User.Name, a.Answer }).ToList()
+    };
+});
 
 app.Run();
 

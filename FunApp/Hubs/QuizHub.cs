@@ -18,7 +18,17 @@ namespace FunApp.Hubs
         public async Task JoinQuiz(string userName)
         {
             var user = _quizService.AddUser(Context.ConnectionId, userName);
+            
+            if (user == null)
+            {
+                // User already joined with this name
+                await Clients.Caller.SendAsync("JoinFailed", "This username is already in the quiz. Please use a different name.");
+                _logger.LogWarning("Join attempt failed: username '{UserName}' already in quiz", userName);
+                return;
+            }
+
             await Clients.All.SendAsync("UserJoined", user);
+            _logger.LogInformation("User '{UserName}' joined the quiz", userName);
         }
 
         public async Task SubmitAnswer(string answer)
@@ -27,18 +37,22 @@ namespace FunApp.Hubs
             await Clients.All.SendAsync("AnswerReceived", userAnswer);
         }
 
-        public async Task ReportVisibilityChange(int switchCount)
+        // ReportVisibilityChange no longer trusts client-provided counts; increment on the server
+        public async Task ReportVisibilityChange(int _ignoredSwitchCount)
         {
             var user = _quizService.GetUser(Context.ConnectionId);
             if (user != null)
             {
-                _logger.LogWarning("User {UserName} switched away from quiz. Switch count: {SwitchCount}", 
-                    user.Name, switchCount);
-                
-                // Notify quiz host about the switch
-                await Clients.Others.SendAsync("UserSwitchedAway", new { 
-                    UserName = user.Name, 
-                    SwitchCount = switchCount 
+                var newCount = _quizService.IncrementSwitchCount(Context.ConnectionId);
+
+                _logger.LogWarning("User {UserName} switched away from quiz. Server switch count: {SwitchCount}",
+                    user.Name, newCount);
+
+                // Notify quiz host about the switch with server-side count
+                await Clients.Others.SendAsync("UserSwitchedAway", new
+                {
+                    UserName = user.Name,
+                    SwitchCount = newCount
                 });
             }
         }
@@ -48,6 +62,48 @@ namespace FunApp.Hubs
             var question = _quizService.GetNextQuestion();
             _quizService.ClearAnswers();
             await Clients.All.SendAsync("NewQuestion", question);
+        }
+
+        // New method: Display quiz results/summary
+        public async Task ShowResults()
+        {
+            var allUsers = _quizService.GetAllUsers();
+            var userAnswersDict = _quizService.GetAllUserAnswers();
+
+            var results = allUsers.Select(user => 
+            {
+                List<object> answers = new();
+                
+                // Get answers for this user
+                if (userAnswersDict.ContainsKey(user.ConnectionId))
+                {
+                    var userAnswers = userAnswersDict[user.ConnectionId];
+                    answers = userAnswers
+                        .Select(answer => (object)new { Answer = answer })
+                        .ToList();
+                }
+
+                return new
+                {
+                    user.Name,
+                    user.SwitchCount,
+                    Answers = answers
+                };
+            }).ToList();
+
+            _logger.LogInformation("ShowResults: Sending {ParticipantCount} participants with results", results.Count);
+            foreach (var r in results)
+            {
+                _logger.LogInformation("  {Name}: {AnswerCount} answers", r.Name, r.Answers.Count);
+            }
+
+            await Clients.All.SendAsync("QuizResults", new
+            {
+                Results = results,
+                TotalQuestions = _quizService.GetCurrentQuestionNumber()
+            });
+
+            _logger.LogInformation("Quiz results displayed with {ParticipantCount} participants", results.Count);
         }
 
         public override async Task OnDisconnectedAsync(Exception? exception)

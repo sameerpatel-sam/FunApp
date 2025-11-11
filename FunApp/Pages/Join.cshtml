@@ -45,7 +45,7 @@
 </div>
 
 @section Scripts {
-    <script src="~/js/signalr/dist/browser/signalr.js"></script>
+    @Html.Raw("<script src=\"https://cdn.jsdelivr.net/npm/@microsoft/signalr@8/dist/browser/signalr.js\"></script>")
     <script>
         const connection = new signalR.HubConnectionBuilder()
             .withUrl("/quizHub")
@@ -96,20 +96,46 @@
             document.getElementById("answer").disabled = false;
         });
 
+        connection.on("JoinFailed", (errorMessage) => {
+            alert("Join Failed: " + errorMessage);
+            // Clear localStorage and input on failed join
+            localStorage.removeItem('quiz_username');
+            document.getElementById("username").value = "";
+            document.getElementById("username").focus();
+        });
+
+        connection.on("QuizResults", (data) => {
+            // Find this user's results
+            const thisUser = data.Results.find(r => r.Name === document.getElementById("username").value.trim());
+            
+            if (thisUser) {
+                let answersText = thisUser.Answers.map((a, idx) => `Q${idx + 1}: ${a.Answer}`).join('\n');
+                alert(`Quiz Complete!\n\nYour Answers:\n${answersText || 'No answers submitted'}\n\nTab Switches: ${thisUser.SwitchCount}`);
+            } else {
+                alert("Quiz results are being displayed!");
+            }
+        });
+
         function joinQuiz() {
             const username = document.getElementById("username").value.trim();
-            if (!username) { alert("Please enter your name"); return; }
+            if (!username) { 
+                alert("Please enter your name"); 
+                return; 
+            }
 
-            // store name locally so we can show it in this session
-            localStorage.setItem('quiz_username', username);
-
+            // Attempt join via SignalR
             connection.invoke("JoinQuiz", username)
                 .then(() => {
+                    // Only save to localStorage and show quiz view on successful join
+                    localStorage.setItem('quiz_username', username);
                     document.getElementById("joinForm").classList.add("hidden");
                     document.getElementById("quizView").classList.remove("hidden");
-                    inQuizMode = true;  // Enable quiz mode tracking
+                    inQuizMode = true;
                 })
-                .catch(console.error);
+                .catch(err => {
+                    console.error("Join error:", err);
+                    alert("Join error: " + err.message);
+                });
         }
 
         function submitAnswer() {
