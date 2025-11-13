@@ -1,0 +1,1 @@
+Migrations will be generated here. Run dotnet ef migrations add InitialCreate to scaffold.

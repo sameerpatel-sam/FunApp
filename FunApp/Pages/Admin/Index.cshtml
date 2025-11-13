@@ -15,47 +15,21 @@
             <!-- Individual Questions -->
             <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
                 <h2 class="text-xl font-bold mb-4">Individual Game Questions</h2>
-                <form method="post" asp-page-handler="Add" class="flex gap-2 mb-4">
-                    <input type="hidden" name="mode" value="individual" />
-                    <input name="text" placeholder="New question" class="flex-1 rounded px-3 py-2 text-black" />
-                    <button class="px-4 py-2 bg-white text-purple-700 font-semibold rounded">Add</button>
-                </form>
-                <div class="space-y-3 max-h-72 overflow-y-auto pr-2">
-                    @foreach (var q in Model.IndividualQuestions)
-                    {
-                        <form method="post" asp-page-handler="Update" class="flex gap-2 items-start bg-white/5 p-2 rounded">
-                            <input type="hidden" name="id" value="@q.Id" />
-                            <textarea name="text" rows="2" class="flex-1 rounded px-2 py-1 text-black">@q.Text</textarea>
-                            <div class="flex flex-col gap-1">
-                                <button class="px-3 py-1 bg-yellow-300 text-yellow-900 rounded text-xs">Update</button>
-                                <button formaction="?handler=Delete" name="id" value="@q.Id" class="px-3 py-1 bg-red-600 text-white rounded text-xs">Delete</button>
-                            </div>
-                        </form>
-                    }
+                <div class="flex gap-2 mb-4">
+                    <input id="newIndividualText" placeholder="New question" class="flex-1 rounded px-3 py-2 text-black" />
+                    <button id="addIndividual" class="px-4 py-2 bg-white text-purple-700 font-semibold rounded">Add</button>
                 </div>
+                <div id="individualList" class="space-y-3 max-h-72 overflow-y-auto pr-2"></div>
             </div>
 
             <!-- Couple Questions -->
             <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
                 <h2 class="text-xl font-bold mb-4">Couple Game Questions</h2>
-                <form method="post" asp-page-handler="Add" class="flex gap-2 mb-4">
-                    <input type="hidden" name="mode" value="couple" />
-                    <input name="text" placeholder="New question" class="flex-1 rounded px-3 py-2 text-black" />
-                    <button class="px-4 py-2 bg-white text-pink-700 font-semibold rounded">Add</button>
-                </form>
-                <div class="space-y-3 max-h-72 overflow-y-auto pr-2">
-                    @foreach (var q in Model.CoupleQuestions)
-                    {
-                        <form method="post" asp-page-handler="Update" class="flex gap-2 items-start bg-white/5 p-2 rounded">
-                            <input type="hidden" name="id" value="@q.Id" />
-                            <textarea name="text" rows="2" class="flex-1 rounded px-2 py-1 text-black">@q.Text</textarea>
-                            <div class="flex flex-col gap-1">
-                                <button class="px-3 py-1 bg-yellow-300 text-yellow-900 rounded text-xs">Update</button>
-                                <button formaction="?handler=Delete" name="id" value="@q.Id" class="px-3 py-1 bg-red-600 text-white rounded text-xs">Delete</button>
-                            </div>
-                        </form>
-                    }
+                <div class="flex gap-2 mb-4">
+                    <input id="newCoupleText" placeholder="New question" class="flex-1 rounded px-3 py-2 text-black" />
+                    <button id="addCouple" class="px-4 py-2 bg-white text-pink-700 font-semibold rounded">Add</button>
                 </div>
+                <div id="coupleList" class="space-y-3 max-h-72 overflow-y-auto pr-2"></div>
             </div>
         </div>
 
@@ -67,7 +41,7 @@
                 <button id="endQuiz" class="px-4 py-2 bg-red-600 text-white font-semibold rounded">End Quiz</button>
                 <button id="refreshLists" class="px-4 py-2 bg-blue-500 text-white font-semibold rounded">Refresh Lists</button>
             </div>
-            <p class="text-xs mt-3 text-white/70">Note: Lists auto refresh on navigation. Use Refresh to reload without leaving the page.</p>
+            <p class="text-xs mt-3 text-white/70">Lists reflect live DB changes via SignalR.</p>
         </div>
     </div>
 </div>
@@ -75,26 +49,65 @@
 @section Scripts {
     @Html.Raw("<script src=\"https://cdn.jsdelivr.net/npm/@microsoft/signalr@8/dist/browser/signalr.js\"></script>")
     <script>
-        const connection = new signalR.HubConnectionBuilder()
-            .withUrl("/quizHub")
-            .withAutomaticReconnect()
-            .build();
+        const connection = new signalR.HubConnectionBuilder().withUrl("/quizHub").withAutomaticReconnect().build();
 
-        document.getElementById("nextQuestion").addEventListener("click", () => {
-            connection.invoke("NextQuestion").catch(console.error);
+        function renderQuestions(mode, questions){
+            const container = mode === 'Individual' ? document.getElementById('individualList') : document.getElementById('coupleList');
+            container.innerHTML = '';
+            if(!questions || questions.length===0){
+                container.innerHTML = '<div class="text-sm text-white/70">No questions</div>';
+                return;
+            }
+            questions.sort((a,b)=>a.id-b.id);
+            questions.forEach(q=>{
+                const row=document.createElement('div');
+                row.className='flex gap-2 items-start bg-white/5 p-2 rounded';
+                row.innerHTML=`<textarea data-id="${q.id}" class='flex-1 rounded px-2 py-1 text-black' rows='2'>${q.text}</textarea>
+                <div class='flex flex-col gap-1'>
+                  <button class='px-3 py-1 bg-yellow-300 text-yellow-900 rounded text-xs' data-action='update'>Update</button>
+                  <button class='px-3 py-1 bg-red-600 text-white rounded text-xs' data-action='delete'>Delete</button>
+                </div>`;
+                container.appendChild(row);
+            });
+        }
+
+        connection.on('QuestionsUpdated',(mode,questions)=>{renderQuestions(mode,questions);});
+
+        function loadAll(){
+            connection.invoke('GetQuestions','Individual').then(q=>renderQuestions('Individual',q));
+            connection.invoke('GetQuestions','Couple').then(q=>renderQuestions('Couple',q));
+        }
+
+        document.getElementById('addIndividual').addEventListener('click',()=>{
+            const txt=document.getElementById('newIndividualText').value.trim();
+            if(!txt)return; connection.invoke('AddQuestion',txt,'Individual').then(()=>{document.getElementById('newIndividualText').value='';});
         });
-        document.getElementById("showResults").addEventListener("click", () => {
-            connection.invoke("GetAllUserAnswers")
-                .then(_ => alert("Results fetched. Open the host screen to view."))
-                .catch(console.error);
-        });
-        document.getElementById("endQuiz").addEventListener("click", () => {
-            connection.invoke("EndQuiz").catch(console.error);
-        });
-        document.getElementById("refreshLists").addEventListener("click", () => {
-            window.location.reload();
+        document.getElementById('addCouple').addEventListener('click',()=>{
+            const txt=document.getElementById('newCoupleText').value.trim();
+            if(!txt)return; connection.invoke('AddQuestion',txt,'Couple').then(()=>{document.getElementById('newCoupleText').value='';});
         });
 
-        connection.start().catch(console.error);
+        function containerClick(e){
+            const btn=e.target.closest('button'); if(!btn) return;
+            const action=btn.dataset.action; if(!action) return;
+            const textarea=btn.closest('div').parentElement.querySelector('textarea');
+            const id=parseInt(textarea.dataset.id);
+            if(action==='update'){
+                const text=textarea.value.trim(); if(!text)return;
+                connection.invoke('UpdateQuestion',id,text).catch(console.error);
+            }else if(action==='delete'){
+                if(!confirm('Delete this question?'))return;
+                connection.invoke('DeleteQuestion',id).catch(console.error);
+            }
+        }
+        document.getElementById('individualList').addEventListener('click',containerClick);
+        document.getElementById('coupleList').addEventListener('click',containerClick);
+
+        document.getElementById('nextQuestion').addEventListener('click',()=>connection.invoke('NextQuestion').catch(console.error));
+        document.getElementById('showResults').addEventListener('click',()=>connection.invoke('GetAllUserAnswers').then(()=>alert('Results loaded; open host screen.')).catch(console.error));
+        document.getElementById('endQuiz').addEventListener('click',()=>connection.invoke('EndQuiz').catch(console.error));
+        document.getElementById('refreshLists').addEventListener('click',loadAll);
+
+        connection.start().then(loadAll).catch(console.error);
     </script>
 }

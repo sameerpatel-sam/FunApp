@@ -5,87 +5,37 @@ namespace FunApp.Services
     public class QuizService
     {
         private readonly Dictionary<string, User> _users = new();
+        private readonly Dictionary<string, User> _usersArchive = new();
         private readonly Dictionary<string, List<string>> _allAnswers = new();
         private readonly Dictionary<string, UserAnswer> _currentAnswers = new();
         private readonly HashSet<string> _joinedUsernames = new();
-        private readonly List<Question> _questions = new();
         private GameMode _currentGameMode = GameMode.Individual;
-        private int _currentQuestionIndex = -1;
+        private int _currentQuestionIndex = -1; // index within persisted question list (managed externally)
+        private int? _currentQuestionId = null; // current persisted question id
         private readonly object _lock = new();
 
-        public QuizService()
-        {
-            InitializeDefaultQuestions();
-        }
-
-        private void InitializeDefaultQuestions()
-        {
-            lock (_lock)
-            {
-                _questions.AddRange(new[]
-                {
-                    new Question { Id = 1, Text = "What's your favorite color?", GameMode = GameMode.Individual },
-                    new Question { Id = 2, Text = "If you could be any animal, what would you be?", GameMode = GameMode.Individual },
-                    new Question { Id = 3, Text = "What's your dream vacation destination?", GameMode = GameMode.Individual },
-                    new Question { Id = 4, Text = "What superpower would you choose?", GameMode = GameMode.Individual },
-                    new Question { Id = 5, Text = "What's your favorite food?", GameMode = GameMode.Individual },
-                    new Question { Id = 6, Text = "How did you two meet?", GameMode = GameMode.Couple },
-                    new Question { Id = 7, Text = "What's your favorite memory together?", GameMode = GameMode.Couple },
-                    new Question { Id = 8, Text = "What do you love most about your partner?", GameMode = GameMode.Couple }
-                });
-            }
-        }
+        // Removed in-memory questions and seeding; persistence handled by PersistentQuizService
 
         public void SetGameMode(GameMode mode)
         {
             _currentGameMode = mode;
             _currentQuestionIndex = -1;
+            _currentQuestionId = null;
         }
 
         public GameMode GetGameMode() => _currentGameMode;
 
-        public List<Question> GetQuestionsByMode(GameMode mode)
+        // Index helpers used by hub when advancing persisted question list
+        public int AdvanceIndex(int totalCount)
         {
-            lock (_lock)
-            {
-                return _questions.Where(q => q.GameMode == mode).ToList();
-            }
+            if (totalCount <= 0) { _currentQuestionIndex = -1; return -1; }
+            _currentQuestionIndex = (_currentQuestionIndex + 1) % totalCount;
+            return _currentQuestionIndex;
         }
 
-        public void AddQuestion(string text, GameMode mode)
-        {
-            lock (_lock)
-            {
-                var maxId = _questions.Any() ? _questions.Max(q => q.Id) : 0;
-                _questions.Add(new Question 
-                { 
-                    Id = maxId + 1, 
-                    Text = text, 
-                    GameMode = mode,
-                    CreatedAt = DateTime.UtcNow
-                });
-            }
-        }
-
-        public void UpdateQuestion(int id, string text)
-        {
-            lock (_lock)
-            {
-                var question = _questions.FirstOrDefault(q => q.Id == id);
-                if (question != null)
-                {
-                    question.Text = text;
-                }
-            }
-        }
-
-        public void DeleteQuestion(int id)
-        {
-            lock (_lock)
-            {
-                _questions.RemoveAll(q => q.Id == id);
-            }
-        }
+        public int GetCurrentQuestionNumber() => _currentQuestionIndex + 1; // 1-based for UI
+        public void SetCurrentQuestionId(int id) => _currentQuestionId = id;
+        public int? GetCurrentQuestionId() => _currentQuestionId;
 
         public User? GetUser(string connectionId)
         {
@@ -95,26 +45,27 @@ namespace FunApp.Services
             }
         }
 
+        public User? GetArchivedUser(string connectionId)
+        {
+            lock (_lock)
+            {
+                return _usersArchive.TryGetValue(connectionId, out var user) ? user : null;
+            }
+        }
+
         public User? AddUser(string connectionId, string name)
         {
             lock (_lock)
             {
                 var normalizedName = name.Trim().ToLower();
-
-                if (_users.ContainsKey(connectionId))
-                {
-                    return null;
-                }
-
-                if (_joinedUsernames.Contains(normalizedName))
-                {
-                    return null;
-                }
+                if (_users.ContainsKey(connectionId)) return null;
+                if (_joinedUsernames.Contains(normalizedName)) return null;
 
                 var user = new User { ConnectionId = connectionId, Name = name.Trim() };
                 _users[connectionId] = user;
+                _usersArchive[connectionId] = user; // keep archived for results
                 _joinedUsernames.Add(normalizedName);
-                _allAnswers[connectionId] = new List<string>();
+                if (!_allAnswers.ContainsKey(connectionId)) _allAnswers[connectionId] = new List<string>();
                 return user;
             }
         }
@@ -126,10 +77,9 @@ namespace FunApp.Services
                 if (_users.TryGetValue(connectionId, out var user))
                 {
                     _joinedUsernames.Remove(user.Name.ToLower());
-                    _users.Remove(connectionId);
-                    _currentAnswers.Remove(connectionId);
-                    _allAnswers.Remove(connectionId);
                 }
+                _users.Remove(connectionId);
+                _currentAnswers.Remove(connectionId);
             }
         }
 
@@ -137,43 +87,19 @@ namespace FunApp.Services
         {
             lock (_lock)
             {
-                if (!_users.ContainsKey(connectionId)) return null;
-
-                var userAnswer = new UserAnswer
-                {
-                    User = _users[connectionId],
-                    Answer = answer
-                };
+                if (!_users.ContainsKey(connectionId) && !_usersArchive.ContainsKey(connectionId)) return null;
+                var user = _users.ContainsKey(connectionId) ? _users[connectionId] : _usersArchive[connectionId];
+                var userAnswer = new UserAnswer { User = user, Answer = answer };
                 _currentAnswers[connectionId] = userAnswer;
-
-                if (_allAnswers.ContainsKey(connectionId))
-                {
-                    _allAnswers[connectionId].Add(answer);
-                }
-
+                if (_allAnswers.ContainsKey(connectionId)) _allAnswers[connectionId].Add(answer);
+                else _allAnswers[connectionId] = new List<string> { answer };
                 return userAnswer;
             }
         }
 
-        public string GetNextQuestion()
-        {
-            var questionsForMode = _questions.Where(q => q.GameMode == _currentGameMode).ToList();
-            if (questionsForMode.Count == 0)
-                return "No questions available for this game mode.";
+        public void ClearAnswers() => _currentAnswers.Clear();
 
-            _currentQuestionIndex = (_currentQuestionIndex + 1) % questionsForMode.Count;
-            return questionsForMode[_currentQuestionIndex].Text;
-        }
-
-        public void ClearAnswers()
-        {
-            _currentAnswers.Clear();
-        }
-
-        public IEnumerable<UserAnswer> GetCurrentAnswers()
-        {
-            return _currentAnswers.Values.ToList();
-        }
+        public IEnumerable<UserAnswer> GetCurrentAnswers() => _currentAnswers.Values.ToList();
 
         public int IncrementSwitchCount(string connectionId)
         {
@@ -182,7 +108,13 @@ namespace FunApp.Services
                 if (_users.TryGetValue(connectionId, out var user))
                 {
                     user.SwitchCount++;
+                    if (_usersArchive.ContainsKey(connectionId)) _usersArchive[connectionId].SwitchCount = user.SwitchCount;
                     return user.SwitchCount;
+                }
+                else if (_usersArchive.TryGetValue(connectionId, out var archived))
+                {
+                    archived.SwitchCount++;
+                    return archived.SwitchCount;
                 }
             }
             return 0;
@@ -190,23 +122,12 @@ namespace FunApp.Services
 
         public IEnumerable<User> GetAllUsers()
         {
-            lock (_lock)
-            {
-                return _users.Values.ToList();
-            }
+            lock (_lock) { return _users.Values.ToList(); }
         }
 
         public Dictionary<string, List<string>> GetAllUserAnswers()
         {
-            lock (_lock)
-            {
-                return new Dictionary<string, List<string>>(_allAnswers);
-            }
-        }
-
-        public int GetCurrentQuestionNumber()
-        {
-            return _currentQuestionIndex + 1;
+            lock (_lock) { return new Dictionary<string, List<string>>(_allAnswers); }
         }
     }
 }

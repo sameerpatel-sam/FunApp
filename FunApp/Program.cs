@@ -1,10 +1,12 @@
 ﻿using Microsoft.AspNetCore.SignalR;
 using FunApp.Hubs;
 using FunApp.Services;
+using FunApp.Data;
+using FunApp.Models;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Bind to host-provided port (e.g. Replit) when available
 var port = Environment.GetEnvironmentVariable("PORT");
 var runningInContainer = !string.IsNullOrEmpty(port);
 if (runningInContainer)
@@ -12,34 +14,73 @@ if (runningInContainer)
     builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
 }
 
-// Add services
 builder.Services.AddRazorPages();
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<QuizService>();
 
-// Configure Kestrel if not running behind a reverse proxy
+var connectionString = builder.Configuration.GetConnectionString("Default") ?? "Data Source=quiz.db";
+builder.Services.AddDbContextFactory<AppDbContext>(options => options.UseSqlite(connectionString));
+builder.Services.AddSingleton<PersistentQuizService>();
+
 if (!builder.Environment.IsDevelopment())
 {
-    builder.WebHost.ConfigureKestrel(serverOptions =>
-    {
-        serverOptions.AddServerHeader = false;
-    });
+    builder.WebHost.ConfigureKestrel(serverOptions => { serverOptions.AddServerHeader = false; });
 }
 
 var app = builder.Build();
+
+// Ensure DB exists and schema is healthy; if not, drop and recreate; then seed
+using (var scope = app.Services.CreateScope())
+{
+    var dbFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
+    using var db = dbFactory.CreateDbContext();
+
+    db.Database.EnsureCreated();
+
+    bool schemaOk = true;
+    try
+    {
+        // Check if Questions table exists by reading from it
+        _ = db.Questions.Take(1).Any();
+    }
+    catch
+    {
+        schemaOk = false;
+    }
+
+    if (!schemaOk)
+    {
+        db.Database.EnsureDeleted();
+        db.Database.EnsureCreated();
+    }
+
+    if (!db.Questions.Any())
+    {
+        db.Questions.AddRange(new[]
+        {
+            new Question { Id = 1, Text = "What's your favorite color?", GameMode = GameMode.Individual },
+            new Question { Id = 2, Text = "If you could be any animal, what would you be?", GameMode = GameMode.Individual },
+            new Question { Id = 3, Text = "What's your dream vacation destination?", GameMode = GameMode.Individual },
+            new Question { Id = 4, Text = "What superpower would you choose?", GameMode = GameMode.Individual },
+            new Question { Id = 5, Text = "What's your favorite food?", GameMode = GameMode.Individual },
+            new Question { Id = 6, Text = "How did you two meet?", GameMode = GameMode.Couple },
+            new Question { Id = 7, Text = "What's your favorite memory together?", GameMode = GameMode.Couple },
+            new Question { Id = 8, Text = "What do you love most about your partner?", GameMode = GameMode.Couple }
+        });
+        db.SaveChanges();
+    }
+}
 
 // Log startup info
 var logger = app.Services.GetRequiredService<ILogger<Program>>();
 logger.LogInformation("Starting FunApp. RunningInContainer={runningInContainer}, PORT={port}", runningInContainer, port ?? "(none)");
 
-// Configure the HTTP request pipeline
 if (!builder.Environment.IsDevelopment() && !runningInContainer)
 {
     app.UseExceptionHandler("/Error");
     app.UseHsts();
 }
 
-// Do not force HTTPS when running in a container or in development
 if (!runningInContainer && !builder.Environment.IsDevelopment())
 {
     app.UseHttpsRedirection();
@@ -47,7 +88,6 @@ if (!runningInContainer && !builder.Environment.IsDevelopment())
 
 app.UseStaticFiles();
 
-// Add security headers
 app.Use(async (context, next) =>
 {
     context.Response.Headers.Add("X-Content-Type-Options", "nosniff");
@@ -61,8 +101,6 @@ app.UseRouting();
 
 app.MapRazorPages();
 app.MapHub<QuizHub>("/quizHub");
-
-// Health endpoint for Replit / load balancers
 app.MapGet("/health", () => Results.Ok("OK"));
 
 app.Run();

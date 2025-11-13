@@ -21,7 +21,7 @@ namespace FunApp.Models
 
     public class QuizSession
     {
-        public string Id { get; set; } = Guid.NewGuid().ToString();
+        public int Id { get; set; }
         public GameMode Mode { get; set; } = GameMode.Individual;
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public bool IsActive { get; set; } = true;
@@ -32,6 +32,16 @@ namespace FunApp.Models
         public int Id { get; set; }
         public string Text { get; set; } = string.Empty;
         public GameMode GameMode { get; set; } = GameMode.Individual;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    public class QuizResponse
+    {
+        public int Id { get; set; }
+        public int QuizSessionId { get; set; }
+        public int QuestionId { get; set; }
+        public string ParticipantName { get; set; } = string.Empty;
+        public string Answer { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 }

@@ -15,48 +15,30 @@
                 </div>
             </div>
             
-            <!-- Game Mode Selection -->
             <div class="flex gap-2">
                 <button id="selectIndividual" class="px-3 py-1 bg-white text-purple-700 font-semibold rounded text-sm hover:scale-[1.05] transition">Individual Players</button>
                 <button id="selectCouple" class="px-3 py-1 bg-white/20 text-white font-semibold rounded text-sm hover:scale-[1.05] transition">Couple Players</button>
                 <a href="/Admin" class="px-3 py-1 bg-blue-600 text-white font-semibold rounded text-sm hover:scale-[1.05] transition">Manage</a>
             </div>
 
-            <!-- Menu Toggle -->
             <button id="menuToggle" class="px-4 py-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition">
                 ? Menu
             </button>
         </div>
     </div>
 
-    <!-- Main Quiz Area (Full Screen) -->
     <div class="flex-1 flex items-center justify-center p-6 overflow-hidden">
         <div class="w-full max-w-4xl">
-            <!-- Question Display -->
             <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-8 mb-6 border border-white/20">
-                <div id="questionDisplay" class="text-4xl md:text-5xl font-bold text-white text-center leading-tight">
-                    Waiting to start...
-                </div>
+                <div id="questionDisplay" class="text-4xl md:text-5xl font-bold text-white text-center leading-tight">Waiting to start...</div>
                 <div class="mt-4 text-center text-white/80">Press Next Question to begin</div>
             </div>
-
-            <!-- Answers Display -->
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6" id="answersContainer"></div>
-
-            <!-- Control Buttons -->
             <div class="flex flex-wrap items-center justify-center gap-3">
-                <button id="nextQuestion" class="px-6 py-3 bg-white text-purple-700 font-bold rounded-lg shadow-lg hover:scale-[1.05] transition text-lg">
-                    ? Next Question
-                </button>
-                <button id="revealAnswers" class="px-6 py-3 bg-blue-500 text-white font-bold rounded-lg shadow-lg hover:scale-[1.05] transition text-lg">
-                    ??? Reveal Answers
-                </button>
-                <button id="showResults" class="px-6 py-3 bg-yellow-500 text-white font-bold rounded-lg shadow-lg hover:scale-[1.05] transition text-lg">
-                    ?? Show Results
-                </button>
-                <button id="clearAnswers" class="px-6 py-3 bg-white/20 text-white font-bold rounded-lg hover:bg-white/30 transition text-lg">
-                    ??? Clear
-                </button>
+                <button id="nextQuestion" class="px-6 py-3 bg-white text-purple-700 font-bold rounded-lg shadow-lg hover:scale-[1.05] transition text-lg">? Next Question</button>
+                <button id="revealAnswers" class="px-6 py-3 bg-blue-500 text-white font-bold rounded-lg shadow-lg hover:scale-[1.05] transition text-lg">??? Reveal Answers</button>
+                <button id="showResults" class="px-6 py-3 bg-yellow-500 text-white font-bold rounded-lg shadow-lg hover:scale-[1.05] transition text-lg">?? Show Results</button>
+                <button id="clearAnswers" class="px-6 py-3 bg-white/20 text-white font-bold rounded-lg hover:bg-white/30 transition text-lg">??? Clear</button>
             </div>
         </div>
     </div>
@@ -104,12 +86,15 @@
 
     <!-- Results Modal -->
     <div id="resultsModal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-        <div class="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+        <div class="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
             <div class="sticky top-0 bg-gradient-to-r from-purple-600 to-pink-500 p-6 flex justify-between items-center">
                 <h2 class="text-2xl font-bold text-white">Quiz Results</h2>
-                <button onclick="closeResults()" class="text-white text-2xl hover:scale-[1.2] transition">?</button>
+                <div class="flex gap-2">
+                    <button onclick="exportResults()" class="text-xs px-3 py-1 bg-white/20 hover:bg-white/30 rounded text-white">Export</button>
+                    <button onclick="closeResults()" class="text-white text-2xl hover:scale-[1.2] transition">?</button>
+                </div>
             </div>
-            <div id="resultsList" class="p-6 space-y-4"></div>
+            <div id="resultsList" class="p-6 grid gap-4 sm:grid-cols-2"></div>
         </div>
     </div>
 </div>
@@ -124,6 +109,10 @@
 
         let participants = {};
         let maxActivityLogEntries = 20;
+
+        function syncParticipantCount() {
+            document.getElementById('participantCount').textContent = Object.keys(participants).length;
+        }
 
         // Menu Toggle Functions
         function openMenu() {
@@ -164,38 +153,29 @@
         }
 
         // SignalR Event Handlers
-        connection.on("UserSwitchedAway", (data) => {
-            const userName = data.UserName ?? data.userName ?? 'Unknown';
-            const switchCount = data.SwitchCount ?? data.switchCount ?? 0;
-            addActivityLog(`?? ${userName} switched away (${switchCount}x)`);
-            
-            // Show flashing banner on host screen
-            showSwitchBanner(userName, switchCount);
-        });
-
-        // Show a temporary flashing banner when user switches away
-        function showSwitchBanner(name, count) {
-            const existing = document.getElementById('switchBanner');
-            if (existing) existing.remove();
-
-            const banner = document.createElement('div');
-            banner.id = 'switchBanner';
-            banner.className = 'fixed top-20 left-1/2 -translate-x-1/2 bg-yellow-400 text-black px-6 py-3 rounded-lg shadow-lg z-50 font-semibold animate-pulse';
-            banner.textContent = `?? ${name} switched away (${count}x)`;
-            document.body.appendChild(banner);
-
-            // Auto-remove after 4 seconds
-            setTimeout(() => banner.remove(), 4000);
-        }
-
         connection.on("UserJoined", (user) => {
-            participants[user.connectionId] = user;
-            document.getElementById('participantCount').textContent = Object.keys(participants).length;
-            addActivityLog(`? ${user.name} joined`);
+            const cid = user.connectionId || user.ConnectionId;
+            const name = user.name || user.Name || 'Unknown';
+            if (!cid) return;
+            participants[cid] = { connectionId: cid, name };
+            syncParticipantCount();
+            addActivityLog(`? ${name} joined`);
         });
 
-        connection.on("AnswerReceived", (userAnswer) => {
-            console.log("Answer received from:", userAnswer.user.name, "-", userAnswer.answer);
+        connection.on("UserLeft", (user) => {
+            const cid = user.connectionId || user.ConnectionId;
+            const name = user.name || user.Name || 'Unknown';
+            if (cid) {
+                delete participants[cid];
+                syncParticipantCount();
+                addActivityLog(`? ${name} left`);
+            }
+        });
+
+        connection.on("UserSwitchedAway", (data) => {
+            const name = data.UserName || data.userName || 'Unknown';
+            const count = data.SwitchCount || data.switchCount || 0;
+            addActivityLog(`?? ${name} switched away (${count}x)`);
         });
 
         connection.on("NewQuestion", (question) => {
@@ -209,22 +189,48 @@
         });
 
         connection.on("QuizEnded", (results) => {
+            renderResults(results);
+        });
+
+        function renderResults(results) {
             const resultsList = document.getElementById("resultsList");
             resultsList.innerHTML = "";
-
+            
+            if (!results || results.length === 0) {
+                resultsList.innerHTML = '<p class="text-gray-500 text-center py-8 col-span-full">No results yet</p>';
+                openResults();
+                return;
+            }
+            
             results.forEach(result => {
-                const resultItem = document.createElement('div');
-                resultItem.className = 'p-4 bg-white rounded-lg shadow-md';
-                resultItem.innerHTML = `
-                    <div class="font-bold text-lg">${result.user.name}</div>
-                    <div class="text-sm text-gray-500">Score: ${result.score}</div>
-                    <div class="mt-2 text-sm">${result.answers.map(ans => `<div>${ans.question}: ${ans.userAnswer} (${ans.correct ? 'Correct' : 'Wrong'})</div>`).join('')}</div>
-                `;
-                resultsList.appendChild(resultItem);
+                const name = result.Name || result.name || 'Unknown';
+                const switchCount = result.SwitchCount || result.switchCount || 0;
+                const answersList = result.Answers || result.answers || [];
+                
+                let answersHtml = '';
+                if (answersList.length > 0) {
+                    answersHtml = answersList.map((a, idx) => {
+                        let answerText = a.Answer || a.answer || (typeof a === 'string' ? a : JSON.stringify(a));
+                        return `<p class="text-xs text-slate-600">Q${idx + 1}: <span class="font-semibold">${answerText}</span></p>`;
+                    }).join('');
+                } else {
+                    answersHtml = '<p class="text-xs text-slate-400">No answers submitted</p>';
+                }
+                
+                const card = document.createElement('div');
+                card.className = 'p-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border border-purple-200';
+                card.innerHTML = `
+                    <div class="flex justify-between items-start mb-2">
+                        <div class="font-bold text-lg text-purple-700">${name}</div>
+                        <div class="text-xs bg-orange-200 text-orange-800 px-2 py-1 rounded">?? ${switchCount} switches</div>
+                    </div>
+                    <div class="space-y-1">${answersHtml}</div>`;
+                resultsList.appendChild(card);
             });
-
-            document.getElementById("resultsModal").classList.remove("hidden");
-        });
+            
+            openResults();
+            addActivityLog("?? Results displayed");
+        }
 
         // Button Handlers
         document.getElementById("nextQuestion").addEventListener("click", () => {
@@ -298,58 +304,8 @@
 
         document.getElementById("showResults").addEventListener("click", () => {
             connection.invoke("GetAllUserAnswers")
-                .then(results => {
-                    const resultsList = document.getElementById("resultsList");
-                    resultsList.innerHTML = "";
-                    
-                    if (!results || results.length === 0) {
-                        resultsList.innerHTML = '<p class="text-gray-500 text-center py-8">No results yet</p>';
-                        openResults();
-                        return;
-                    }
-                    
-                    results.forEach(result => {
-                        const name = result.Name || result.name || 'Unknown';
-                        const switchCount = result.SwitchCount || result.switchCount || 0;
-                        const answersList = result.Answers || result.answers || [];
-                        
-                        console.log(`Displaying results for ${name}:`, answersList);
-                        
-                        let answersHtml = '';
-                        if (answersList && answersList.length > 0) {
-                            answersHtml = answersList.map((a, idx) => {
-                                // Handle both direct string answers and object answers
-                                let answerText = '';
-                                if (typeof a === 'string') {
-                                    answerText = a;
-                                } else if (typeof a === 'object' && a !== null) {
-                                    answerText = a.Answer || a.answer || JSON.stringify(a);
-                                } else {
-                                    answerText = String(a);
-                                }
-                                return `<p class="text-sm text-slate-600">Q${idx + 1}: <span class="font-semibold">${answerText}</span></p>`;
-                            }).join('');
-                        }
-                        
-                        const resultCard = document.createElement('div');
-                        resultCard.className = 'p-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border border-purple-200';
-                        resultCard.innerHTML = `
-                            <div class="flex justify-between items-start mb-2">
-                                <div class="font-bold text-lg text-purple-700">${name}</div>
-                                <div class="text-xs bg-orange-200 text-orange-800 px-2 py-1 rounded">?? ${switchCount} switches</div>
-                            </div>
-                            <div class="text-sm space-y-1">${answersHtml || '<p class="text-gray-500">No answers submitted</p>'}</div>
-                        `;
-                        resultsList.appendChild(resultCard);
-                    });
-                    
-                    openResults();
-                    addActivityLog("?? Results displayed");
-                })
-                .catch(err => {
-                    console.error("Error fetching results:", err);
-                    addActivityLog("? Error displaying results");
-                });
+                .then(results => { renderResults(results); })
+                .catch(err => { console.error("Error fetching results:", err); addActivityLog("? Error displaying results"); });
         });
 
         function copyJoinUrl() {
@@ -359,10 +315,36 @@
             alert("Link copied!");
         }
 
-        function closeResults() {
-            document.getElementById("resultsModal").classList.add("hidden");
+        function exportResults() {
+            const rows = [['Name','Switches','Answer#','Answer']];
+            const cards = document.querySelectorAll('#resultsList > div');
+            cards.forEach(card => {
+                const name = card.querySelector('.font-bold').textContent.trim();
+                const switches = card.querySelector('.bg-orange-200')?.textContent.replace(/[^0-9]/g,'') || '0';
+                const answers = card.querySelectorAll('.space-y-1 p');
+                if (answers.length === 0) rows.push([name,switches,'','']);
+                answers.forEach((p, idx) => {
+                    const txt = p.textContent.replace(/Q[0-9]+:\s*/,'')
+                    rows.push([name,switches,(idx+1).toString(),txt]);
+                });
+            });
+            const csv = rows.map(r => r.map(v => '"'+v.replace('"','""')+'"').join(',')).join('\n');
+            const blob = new Blob([csv], {type:'text/csv'}); const url = URL.createObjectURL(blob);
+            const a = document.createElement('a'); a.href=url; a.download='quiz-results.csv'; a.click(); URL.revokeObjectURL(url);
         }
 
-        connection.start().catch(err => console.error(err));
+        connection.start().then(() => {
+            connection.invoke("GetParticipants").then(list => {
+                participants = {};
+                (list || []).forEach(u => {
+                    const cid = u.connectionId || u.ConnectionId;
+                    const name = u.name || u.Name || 'Unknown';
+                    if (cid) {
+                        participants[cid] = { connectionId: cid, name };
+                    }
+                });
+                syncParticipantCount();
+            }).catch(err => console.error("GetParticipants error", err));
+        }).catch(err => console.error("SignalR start failed", err));
     </script>
 }
