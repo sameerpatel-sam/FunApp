@@ -111,7 +111,13 @@
         let maxActivityLogEntries = 20;
 
         function syncParticipantCount() {
-            document.getElementById('participantCount').textContent = Object.keys(participants).length;
+            const count = Object.keys(participants).length;
+            document.getElementById('participantCount').textContent = count;
+            
+            // Warn if approaching limits
+            if (count >= 15) {
+                console.warn(`?? High participant count: ${count}. May approach ngrok free tier limits.`);
+            }
         }
 
         // Menu Toggle Functions

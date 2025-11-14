@@ -15,7 +15,13 @@ if (runningInContainer)
 }
 
 builder.Services.AddRazorPages();
-builder.Services.AddSignalR();
+builder.Services.AddSignalR(options =>
+{
+    options.EnableDetailedErrors = false; // Reduce bandwidth
+    options.KeepAliveInterval = TimeSpan.FromSeconds(30); // Longer intervals
+    options.ClientTimeoutInterval = TimeSpan.FromSeconds(60);
+    options.MaximumReceiveMessageSize = 32 * 1024; // Limit message size
+});
 builder.Services.AddSingleton<QuizService>();
 
 var connectionString = builder.Configuration.GetConnectionString("Default") ?? "Data Source=quiz.db";
