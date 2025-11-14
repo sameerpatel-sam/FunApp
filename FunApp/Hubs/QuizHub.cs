@@ -160,14 +160,11 @@ namespace FunApp.Hubs
 
         public async Task DeleteQuestion(int id)
         {
-            // find the question to determine its mode for correct UI refresh
-            var existing = await _persistent.FindQuestionAsync(id);
-            var mode = existing?.GameMode ?? _quizService.GetGameMode();
-
             await _persistent.DeleteQuestionAsync(id);
-            var questions = await _persistent.GetQuestionsAsync(mode);
-            await Clients.All.SendAsync("QuestionsUpdated", mode.ToString(), questions);
-            _logger.LogInformation("Question {Id} deleted (mode {Mode})", id, mode);
+            var gameMode = _quizService.GetGameMode();
+            var questions = await _persistent.GetQuestionsAsync(gameMode);
+            await Clients.All.SendAsync("QuestionsUpdated", gameMode.ToString(), questions);
+            _logger.LogInformation("Question {Id} deleted", id);
         }
 
         public async Task EndQuiz()

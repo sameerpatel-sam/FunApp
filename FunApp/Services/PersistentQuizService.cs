@@ -94,12 +94,6 @@ namespace FunApp.Services
             return db.Questions.Where(q => q.GameMode == mode).OrderBy(q => q.Id).ToListAsync();
         }
 
-        public async Task<Question?> FindQuestionAsync(int id)
-        {
-            using var db = _factory.CreateDbContext();
-            return await db.Questions.AsNoTracking().FirstOrDefaultAsync(q => q.Id == id);
-        }
-
         public async Task<QuizResponse?> AddResponseAsync(string participantName, int questionId, string answer)
         {
             var session = await EnsureSessionAsync();

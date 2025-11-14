@@ -10,11 +10,11 @@ namespace FunApp.Services
         private readonly Dictionary<string, UserAnswer> _currentAnswers = new();
         private readonly HashSet<string> _joinedUsernames = new();
         private GameMode _currentGameMode = GameMode.Individual;
-        private int _currentQuestionIndex = -1; // index within persisted question list (managed externally)
+        private int _currentQuestionIndex = -1; // index within persisted question list
         private int? _currentQuestionId = null; // current persisted question id
         private readonly object _lock = new();
 
-        // Removed in-memory questions and seeding; persistence handled by PersistentQuizService
+        // All questions are persisted; no in-memory list retained here.
 
         public void SetGameMode(GameMode mode)
         {
@@ -25,7 +25,6 @@ namespace FunApp.Services
 
         public GameMode GetGameMode() => _currentGameMode;
 
-        // Index helpers used by hub when advancing persisted question list
         public int AdvanceIndex(int totalCount)
         {
             if (totalCount <= 0) { _currentQuestionIndex = -1; return -1; }
@@ -33,38 +32,30 @@ namespace FunApp.Services
             return _currentQuestionIndex;
         }
 
-        public int GetCurrentQuestionNumber() => _currentQuestionIndex + 1; // 1-based for UI
+        public int GetCurrentQuestionNumber() => _currentQuestionIndex + 1;
         public void SetCurrentQuestionId(int id) => _currentQuestionId = id;
         public int? GetCurrentQuestionId() => _currentQuestionId;
 
         public User? GetUser(string connectionId)
         {
-            lock (_lock)
-            {
-                return _users.TryGetValue(connectionId, out var user) ? user : null;
-            }
+            lock (_lock) { return _users.TryGetValue(connectionId, out var user) ? user : null; }
         }
 
         public User? GetArchivedUser(string connectionId)
         {
-            lock (_lock)
-            {
-                return _usersArchive.TryGetValue(connectionId, out var user) ? user : null;
-            }
+            lock (_lock) { return _usersArchive.TryGetValue(connectionId, out var user) ? user : null; }
         }
 
         public User? AddUser(string connectionId, string name)
         {
             lock (_lock)
             {
-                var normalizedName = name.Trim().ToLower();
-                if (_users.ContainsKey(connectionId)) return null;
-                if (_joinedUsernames.Contains(normalizedName)) return null;
-
+                var normalized = name.Trim().ToLower();
+                if (_users.ContainsKey(connectionId) || _joinedUsernames.Contains(normalized)) return null;
                 var user = new User { ConnectionId = connectionId, Name = name.Trim() };
                 _users[connectionId] = user;
-                _usersArchive[connectionId] = user; // keep archived for results
-                _joinedUsernames.Add(normalizedName);
+                _usersArchive[connectionId] = user;
+                _joinedUsernames.Add(normalized);
                 if (!_allAnswers.ContainsKey(connectionId)) _allAnswers[connectionId] = new List<string>();
                 return user;
             }
@@ -75,9 +66,7 @@ namespace FunApp.Services
             lock (_lock)
             {
                 if (_users.TryGetValue(connectionId, out var user))
-                {
                     _joinedUsernames.Remove(user.Name.ToLower());
-                }
                 _users.Remove(connectionId);
                 _currentAnswers.Remove(connectionId);
             }
@@ -89,16 +78,14 @@ namespace FunApp.Services
             {
                 if (!_users.ContainsKey(connectionId) && !_usersArchive.ContainsKey(connectionId)) return null;
                 var user = _users.ContainsKey(connectionId) ? _users[connectionId] : _usersArchive[connectionId];
-                var userAnswer = new UserAnswer { User = user, Answer = answer };
-                _currentAnswers[connectionId] = userAnswer;
-                if (_allAnswers.ContainsKey(connectionId)) _allAnswers[connectionId].Add(answer);
-                else _allAnswers[connectionId] = new List<string> { answer };
-                return userAnswer;
+                var ua = new UserAnswer { User = user, Answer = answer };
+                _currentAnswers[connectionId] = ua;
+                if (_allAnswers.ContainsKey(connectionId)) _allAnswers[connectionId].Add(answer); else _allAnswers[connectionId] = new List<string> { answer };
+                return ua;
             }
         }
 
         public void ClearAnswers() => _currentAnswers.Clear();
-
         public IEnumerable<UserAnswer> GetCurrentAnswers() => _currentAnswers.Values.ToList();
 
         public int IncrementSwitchCount(string connectionId)

@@ -29,7 +29,7 @@ if (!builder.Environment.IsDevelopment())
 
 var app = builder.Build();
 
-// Ensure DB exists and schema is healthy; if not, drop and recreate; then seed
+// Ensure DB exists and schema is healthy; if not, recreate (no in-memory seeding now)
 using (var scope = app.Services.CreateScope())
 {
     var dbFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
@@ -38,37 +38,15 @@ using (var scope = app.Services.CreateScope())
     db.Database.EnsureCreated();
 
     bool schemaOk = true;
-    try
-    {
-        // Check if Questions table exists by reading from it
-        _ = db.Questions.Take(1).Any();
-    }
-    catch
-    {
-        schemaOk = false;
-    }
-
+    try { _ = db.Questions.Take(1).Any(); } catch { schemaOk = false; }
     if (!schemaOk)
     {
         db.Database.EnsureDeleted();
         db.Database.EnsureCreated();
     }
-
-    if (!db.Questions.Any())
-    {
-        db.Questions.AddRange(new[]
-        {
-            new Question { Id = 1, Text = "What's your favorite color?", GameMode = GameMode.Individual },
-            new Question { Id = 2, Text = "If you could be any animal, what would you be?", GameMode = GameMode.Individual },
-            new Question { Id = 3, Text = "What's your dream vacation destination?", GameMode = GameMode.Individual },
-            new Question { Id = 4, Text = "What superpower would you choose?", GameMode = GameMode.Individual },
-            new Question { Id = 5, Text = "What's your favorite food?", GameMode = GameMode.Individual },
-            new Question { Id = 6, Text = "How did you two meet?", GameMode = GameMode.Couple },
-            new Question { Id = 7, Text = "What's your favorite memory together?", GameMode = GameMode.Couple },
-            new Question { Id = 8, Text = "What do you love most about your partner?", GameMode = GameMode.Couple }
-        });
-        db.SaveChanges();
-    }
+    var individualCount = db.Questions.Count(q => q.GameMode == GameMode.Individual);
+    var coupleCount = db.Questions.Count(q => q.GameMode == GameMode.Couple);
+    app.Logger.LogInformation("DB question counts: Individual={IndividualCount}, Couple={CoupleCount}", individualCount, coupleCount);
 }
 
 // Log startup info

@@ -1,7 +1,7 @@
 @page
 @model IndexModel
 @{
-    ViewData["Title"] = "Fun Quiz App";
+    ViewData["Title"] = "Fun App by Sameer";
 }
 
 <div class="h-screen flex flex-col bg-gradient-to-b from-purple-600 via-pink-500 to-orange-400">
@@ -9,7 +9,7 @@
     <div class="bg-black/20 backdrop-blur-sm border-b border-white/10">
         <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
             <div class="flex items-center gap-4">
-                <h1 class="text-2xl font-extrabold text-white">Fun Quiz</h1>
+                <h1 class="text-2xl font-extrabold text-white">Fun App by Sameer</h1>
                 <div class="text-sm text-white/80">
                     Participants: <span id="participantCount" class="font-bold text-white">0</span>
                 </div>
@@ -36,9 +36,9 @@
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6" id="answersContainer"></div>
             <div class="flex flex-wrap items-center justify-center gap-3">
                 <button id="nextQuestion" class="px-6 py-3 bg-white text-purple-700 font-bold rounded-lg shadow-lg hover:scale-[1.05] transition text-lg">? Next Question</button>
-                <button id="revealAnswers" class="px-6 py-3 bg-blue-500 text-white font-bold rounded-lg shadow-lg hover:scale-[1.05] transition text-lg">??? Reveal Answers</button>
+                <button id="revealAnswers" class="px-6 py-3 bg-blue-500 text-white font-bold rounded-lg shadow-lg hover:scale-[1.05] transition text-lg">?? Reveal Answers</button>
                 <button id="showResults" class="px-6 py-3 bg-yellow-500 text-white font-bold rounded-lg shadow-lg hover:scale-[1.05] transition text-lg">?? Show Results</button>
-                <button id="clearAnswers" class="px-6 py-3 bg-white/20 text-white font-bold rounded-lg hover:bg-white/30 transition text-lg">??? Clear</button>
+                <button id="clearAnswers" class="px-6 py-3 bg-white/20 text-white font-bold rounded-lg hover:bg-white/30 transition text-lg">?? Clear</button>
             </div>
         </div>
     </div>
@@ -196,6 +196,8 @@
             const resultsList = document.getElementById("resultsList");
             resultsList.innerHTML = "";
             
+            console.log("Rendering results:", results); // Debug logging
+            
             if (!results || results.length === 0) {
                 resultsList.innerHTML = '<p class="text-gray-500 text-center py-8 col-span-full">No results yet</p>';
                 openResults();
@@ -203,15 +205,33 @@
             }
             
             results.forEach(result => {
+                console.log("Processing result:", result); // Debug logging
+                
                 const name = result.Name || result.name || 'Unknown';
-                const switchCount = result.SwitchCount || result.switchCount || 0;
+                const switchCount = result.SwitchCount !== undefined ? result.SwitchCount : (result.switchCount || 0);
                 const answersList = result.Answers || result.answers || [];
                 
+                console.log(`User: ${name}, Switches: ${switchCount}, Answers:`, answersList); // Debug logging
+                
                 let answersHtml = '';
-                if (answersList.length > 0) {
+                if (answersList && answersList.length > 0) {
                     answersHtml = answersList.map((a, idx) => {
-                        let answerText = a.Answer || a.answer || (typeof a === 'string' ? a : JSON.stringify(a));
-                        return `<p class="text-xs text-slate-600">Q${idx + 1}: <span class="font-semibold">${answerText}</span></p>`;
+                        // Handle both object format {Answer: "text"} and plain string format
+                        let answerText;
+                        if (typeof a === 'string') {
+                            answerText = a;
+                        } else if (a && (a.Answer || a.answer)) {
+                            answerText = a.Answer || a.answer;
+                        } else if (a && typeof a === 'object') {
+                            answerText = JSON.stringify(a);
+                        } else {
+                            answerText = String(a);
+                        }
+                        
+                        // Escape HTML to prevent XSS
+                        const escapedAnswer = answerText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+                        
+                        return `<p class="text-xs text-slate-600">Q${idx + 1}: <span class="font-semibold">${escapedAnswer}</span></p>`;
                     }).join('');
                 } else {
                     answersHtml = '<p class="text-xs text-slate-400">No answers submitted</p>';
@@ -245,6 +265,7 @@
         document.getElementById("revealAnswers").addEventListener("click", () => {
             connection.invoke("GetCurrentAnswers")
                 .then(answers => {
+                    console.log("GetCurrentAnswers response:", answers);
                     const answersContainer = document.getElementById("answersContainer");
                     answersContainer.innerHTML = "";
                     
@@ -255,18 +276,26 @@
                     }
                     
                     answers.forEach(answer => {
+                        // Handle both PascalCase and camelCase properties
+                        const user = answer.User || answer.user;
+                        const userName = user ? (user.Name || user.name || 'Unknown') : 'Unknown';
+                        const answerText = answer.Answer || answer.answer || '';
+                        
                         const card = document.createElement('div');
                         card.className = 'bg-white/90 p-4 rounded-lg shadow-sm backdrop-blur-sm animate-bounce';
                         card.innerHTML = `
-                            <div class="font-semibold text-purple-700">${answer.user.name}</div>
-                            <div class="mt-1 text-sm text-slate-700 break-words">${answer.answer}</div>
+                            <div class="font-semibold text-purple-700">${userName}</div>
+                            <div class="mt-1 text-sm text-slate-700 break-words">${answerText}</div>
                         `;
                         answersContainer.appendChild(card);
                     });
                     
                     addActivityLog(`??? Revealed ${answers.length} answers`);
                 })
-                .catch(err => console.error(err));
+                .catch(err => {
+                    console.error("Error revealing answers:", err);
+                    addActivityLog("? Error revealing answers");
+                });
         });
 
         document.getElementById("selectIndividual").addEventListener("click", () => {
@@ -303,9 +332,17 @@
         });
 
         document.getElementById("showResults").addEventListener("click", () => {
+            console.log("Show Results button clicked");
             connection.invoke("GetAllUserAnswers")
-                .then(results => { renderResults(results); })
-                .catch(err => { console.error("Error fetching results:", err); addActivityLog("? Error displaying results"); });
+                .then(results => { 
+                    console.log("GetAllUserAnswers response:", results);
+                    renderResults(results); 
+                })
+                .catch(err => { 
+                    console.error("Error fetching results:", err); 
+                    addActivityLog("? Error displaying results"); 
+                    alert("Error fetching results: " + err.message);
+                });
         });
 
         function copyJoinUrl() {
