@@ -28,7 +28,20 @@ namespace FunApp.Hubs
             }
             await _persistent.EnsureSessionAsync();
             await Clients.All.SendAsync("UserJoined", user);
-            _logger.LogInformation("User '{UserName}' joined the quiz", userName);
+            
+            // Log couple pairing if in couple mode
+            if (_quizService.GetGameMode() == GameMode.Couple && !string.IsNullOrEmpty(user.LastName))
+            {
+                var couples = _quizService.GetCouplesByLastName();
+                if (couples.ContainsKey(user.LastName.ToLower()) && couples[user.LastName.ToLower()].Count == 2)
+                {
+                    _logger.LogInformation("Couple formed: Mr & Mrs {LastName}", user.LastName);
+                    await Clients.All.SendAsync("CoupleFormed", new { LastName = user.LastName });
+                }
+            }
+            
+            _logger.LogInformation("User '{UserName}' joined the quiz (FirstName: {FirstName}, LastName: {LastName})", 
+                userName, user.FirstName, user.LastName);
         }
 
         public Task<List<User>> GetParticipants()
@@ -45,6 +58,25 @@ namespace FunApp.Hubs
             {
                 var qId = _quizService.GetCurrentQuestionId() ?? 0;
                 await _persistent.AddResponseAsync(userAnswer.User.Name, qId, userAnswer.Answer);
+                
+                // Check if couple mode and both partners have answered
+                if (_quizService.GetGameMode() == GameMode.Couple && !string.IsNullOrEmpty(userAnswer.User.LastName))
+                {
+                    var couples = _quizService.GetCouplesByLastName();
+                    var lastName = userAnswer.User.LastName.ToLower();
+                    
+                    if (couples.ContainsKey(lastName))
+                    {
+                        var partners = couples[lastName];
+                        var currentAnswers = _quizService.GetCurrentAnswers().ToList();
+                        var bothAnswered = partners.All(p => currentAnswers.Any(ca => ca.User.ConnectionId == p.ConnectionId));
+                        
+                        if (bothAnswered)
+                        {
+                            await Clients.All.SendAsync("CoupleAnswered", new { LastName = userAnswer.User.LastName });
+                        }
+                    }
+                }
             }
             await Clients.All.SendAsync("AnswerReceived", userAnswer);
         }
@@ -64,8 +96,13 @@ namespace FunApp.Hubs
         {
             try
             {
+                // Evaluate couple answers BEFORE clearing and BEFORE moving to next question
+                if (_quizService.GetGameMode() == GameMode.Couple && _quizService.GetCurrentQuestionId() != null)
+                {
+                    await EvaluateCoupleAnswersForCurrentQuestion();
+                }
+                
                 await _persistent.EnsureSessionAsync();
-                // Get next question from persisted store to ensure valid QuestionId
                 var mode = _quizService.GetGameMode();
                 var list = await _persistent.GetQuestionsAsync(mode);
                 if (list.Count == 0)
@@ -73,16 +110,59 @@ namespace FunApp.Hubs
                     await Clients.All.SendAsync("NewQuestion", "No questions available for this game mode.");
                     return;
                 }
+                
+                // Clear answers AFTER evaluation
+                _quizService.ClearAnswers();
+                
+                // Check if we've reached the end of questions
+                var currentIndex = _quizService.GetCurrentQuestionNumber() - 1; // 0-based
+                var isLastQuestion = currentIndex >= list.Count - 1;
+                
+                if (isLastQuestion)
+                {
+                    // We've shown all questions, display end game message
+                    if (mode == GameMode.Couple)
+                    {
+                        await Clients.All.SendAsync("GameOver", "?? Game is now over! Let's check which couple has stolen today's show! Click 'Show Results' to see the winners! ??");
+                        _logger.LogInformation("All questions completed. Game over message sent.");
+                    }
+                    else
+                    {
+                        await Clients.All.SendAsync("GameOver", "?? Game is now over! Click 'Show Results' to see who won! ??");
+                        _logger.LogInformation("All questions completed. Game over message sent.");
+                    }
+                    // Loop back to first question
+                    _quizService.AdvanceIndex(list.Count); // This will reset to 0
+                }
+                
+                // Now advance to next question
                 var idx = _quizService.AdvanceIndex(list.Count);
                 var q = list[idx];
                 _quizService.SetCurrentQuestionId(q.Id);
-                _quizService.ClearAnswers();
+                
                 await Clients.All.SendAsync("NewQuestion", q.Text);
+                
+                _logger.LogInformation("Advanced to question {QuestionNumber}/{TotalQuestions}: {QuestionText}", 
+                    _quizService.GetCurrentQuestionNumber(), list.Count, q.Text);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "NextQuestion failed");
                 throw new HubException($"NextQuestion failed: {ex.Message}");
+            }
+        }
+
+        private async Task EvaluateCoupleAnswersForCurrentQuestion()
+        {
+            var evaluations = _quizService.EvaluateCoupleAnswers();
+            var questionId = _quizService.GetCurrentQuestionId() ?? 0;
+            
+            foreach (var (lastNameKey, partner1Answer, partner2Answer, matched, properLastName) in evaluations)
+            {
+                // Use properLastName (with correct case) for database storage
+                await _persistent.SaveCoupleScoreAsync(properLastName, questionId, matched, partner1Answer, partner2Answer);
+                _logger.LogInformation("Couple {LastName}: Answers {Status} ('{Answer1}' vs '{Answer2}')", 
+                    properLastName, matched ? "MATCHED" : "did not match", partner1Answer, partner2Answer);
             }
         }
 
@@ -92,31 +172,89 @@ namespace FunApp.Hubs
             return Task.FromResult(answers.Select(a => new { a.User, a.Answer }).Cast<dynamic>().ToList());
         }
 
-        public Task<List<dynamic>> GetAllUserAnswers()
+        public async Task<List<dynamic>> GetAllUserAnswers()
         {
-            var answersDict = _quizService.GetAllUserAnswers();
-            var activeUsers = _quizService.GetAllUsers().ToDictionary(u => u.ConnectionId, u => u);
-            var allConnectionIds = answersDict.Keys.Union(activeUsers.Keys).Distinct();
-
-            var results = new List<object>();
-            foreach (var cid in allConnectionIds)
+            var gameMode = _quizService.GetGameMode();
+            
+            if (gameMode == GameMode.Couple)
             {
-                var user = activeUsers.ContainsKey(cid) ? activeUsers[cid] : _quizService.GetArchivedUser(cid);
-                if (user == null) continue;
-
-                List<object> answers = answersDict.ContainsKey(cid)
-                    ? answersDict[cid].Select(a => (object)new { Answer = a }).ToList()
-                    : new List<object>();
-
-                results.Add(new
+                // Evaluate current question's answers if not yet evaluated
+                if (_quizService.GetCurrentQuestionId() != null)
                 {
-                    Name = user.Name,
-                    user.SwitchCount,
-                    Answers = answers
-                });
+                    var currentAnswers = _quizService.GetCurrentAnswers().ToList();
+                    if (currentAnswers.Count > 0)
+                    {
+                        _logger.LogInformation("Evaluating final question's answers before showing results...");
+                        await EvaluateCoupleAnswersForCurrentQuestion();
+                    }
+                }
+                
+                // Get current session ID
+                var sessionId = _persistent.GetCurrentSessionId();
+                if (!sessionId.HasValue)
+                {
+                    _logger.LogWarning("No active session ID found!");
+                    return new List<dynamic>();
+                }
+                
+                _logger.LogInformation("Getting couple scores from database for session {SessionId}", sessionId.Value);
+                
+                // Get couple scores DIRECTLY from database - this is the source of truth
+                var dbScores = await _persistent.GetCoupleTotalScoresAsync(sessionId.Value);
+                
+                _logger.LogInformation("Found {Count} couples in database", dbScores.Count);
+                
+                // Create result list - ONLY Name and Score, nothing else
+                var results = new List<dynamic>();
+                
+                foreach (var (lastName, score) in dbScores)
+                {
+                    _logger.LogInformation("Couple {LastName}: Score from DB = {Score}", lastName, score);
+                    
+                    // Create a dictionary with ONLY the two properties we need
+                    var coupleResult = new Dictionary<string, object>
+                    {
+                        { "Name", $"Mr & Mrs {lastName}" },
+                        { "Score", score }
+                    };
+                    
+                    results.Add(coupleResult);
+                    
+                    // Log what we're actually sending
+                    _logger.LogInformation("Adding to results: Name='{Name}', Score={Score}", 
+                        coupleResult["Name"], coupleResult["Score"]);
+                }
+                
+                _logger.LogInformation("Returning {Count} couple results to UI", results.Count);
+                return results;
             }
+            else
+            {
+                // Individual mode - existing logic
+                var answersDict = _quizService.GetAllUserAnswers();
+                var activeUsers = _quizService.GetAllUsers().ToDictionary(u => u.ConnectionId, u => u);
+                var allConnectionIds = answersDict.Keys.Union(activeUsers.Keys).Distinct();
 
-            return Task.FromResult(results.Cast<dynamic>().ToList());
+                var results = new List<dynamic>();
+                foreach (var cid in allConnectionIds)
+                {
+                    var user = activeUsers.ContainsKey(cid) ? activeUsers[cid] : _quizService.GetArchivedUser(cid);
+                    if (user == null) continue;
+
+                    List<object> answers = answersDict.ContainsKey(cid)
+                        ? answersDict[cid].Select(a => (object)new { Answer = a }).ToList()
+                        : new List<object>();
+
+                    results.Add(new Dictionary<string, object>
+                    {
+                        { "Name", user.Name },
+                        { "SwitchCount", user.SwitchCount },
+                        { "Answers", answers }
+                    });
+                }
+
+                return results;
+            }
         }
 
         public async Task SetGameMode(string mode)

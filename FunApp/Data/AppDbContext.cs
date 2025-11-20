@@ -10,6 +10,7 @@ namespace FunApp.Data
         public DbSet<Question> Questions => Set<Question>();
         public DbSet<QuizSession> QuizSessions => Set<QuizSession>();
         public DbSet<QuizResponse> QuizResponses => Set<QuizResponse>();
+        public DbSet<CoupleScore> CoupleScores => Set<CoupleScore>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -36,6 +37,15 @@ namespace FunApp.Data
                 e.Property(r => r.Answer).IsRequired();
                 e.HasOne<QuizSession>().WithMany().HasForeignKey(r => r.QuizSessionId).OnDelete(DeleteBehavior.Cascade);
                 e.HasOne<Question>().WithMany().HasForeignKey(r => r.QuestionId).OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<CoupleScore>(e =>
+            {
+                e.HasKey(c => c.Id);
+                e.Property(c => c.LastName).IsRequired();
+                e.Property(c => c.PointsAwarded).IsRequired();
+                e.HasOne<QuizSession>().WithMany().HasForeignKey(c => c.QuizSessionId).OnDelete(DeleteBehavior.Cascade);
+                e.HasOne<Question>().WithMany().HasForeignKey(c => c.QuestionId).OnDelete(DeleteBehavior.Cascade);
             });
         }
     }

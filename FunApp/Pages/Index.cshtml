@@ -91,10 +91,10 @@
                 <h2 class="text-2xl font-bold text-white">Quiz Results</h2>
                 <div class="flex gap-2">
                     <button onclick="exportResults()" class="text-xs px-3 py-1 bg-white/20 hover:bg-white/30 rounded text-white">Export</button>
-                    <button onclick="closeResults()" class="text-white text-2xl hover:scale-[1.2] transition">?</button>
+                    <button onclick="closeResults()" class="text-white text-2xl hover:scale-[1.2] transition">×</button>
                 </div>
             </div>
-            <div id="resultsList" class="p-6 grid gap-4 sm:grid-cols-2"></div>
+            <div id="resultsList" class="p-6 grid gap-4"></div>
         </div>
     </div>
 </div>
@@ -190,6 +190,37 @@
             addActivityLog(`? New question asked`);
         });
 
+        connection.on("GameOver", (message) => {
+            // Display game over message
+            document.getElementById("questionDisplay").textContent = message;
+            document.getElementById("questionDisplay").classList.add("animate-pulse");
+            addActivityLog(`?? ${message}`);
+            
+            // Remove pulse animation after 3 seconds
+            setTimeout(() => {
+                document.getElementById("questionDisplay").classList.remove("animate-pulse");
+            }, 3000);
+            
+            // Optionally show a celebratory notification
+            const celebration = document.createElement('div');
+            celebration.className = 'fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-gradient-to-r from-yellow-400 via-pink-500 to-purple-600 text-white text-2xl font-bold p-8 rounded-2xl shadow-2xl z-50 animate-bounce';
+            celebration.innerHTML = `
+                <div class="text-center">
+                    <div class="text-4xl mb-4">??????</div>
+                    <div>Game Over!</div>
+                    <div class="text-lg mt-2">Click "Show Results" to see the winners!</div>
+                </div>
+            `;
+            document.body.appendChild(celebration);
+            
+            // Remove celebration after 5 seconds
+            setTimeout(() => {
+                celebration.style.opacity = '0';
+                celebration.style.transition = 'opacity 1s';
+                setTimeout(() => celebration.remove(), 1000);
+            }, 5000);
+        });
+
         connection.on("GameModeChanged", (mode) => {
             addActivityLog(`?? Mode: ${mode}`);
         });
@@ -202,7 +233,19 @@
             const resultsList = document.getElementById("resultsList");
             resultsList.innerHTML = "";
             
-            console.log("Rendering results:", results); // Debug logging
+            console.log("=== RENDER RESULTS DEBUG ===");
+            console.log("Rendering results:", results);
+            console.log("Results is array:", Array.isArray(results));
+            console.log("Results length:", results ? results.length : 0);
+            
+            if (results && results.length > 0) {
+                console.log("First result:", results[0]);
+                console.log("First result keys:", Object.keys(results[0]));
+                console.log("First result Name:", results[0].Name);
+                console.log("First result Score:", results[0].Score);
+                console.log("First result SwitchCount:", results[0].SwitchCount);
+                console.log("First result Answers:", results[0].Answers);
+            }
             
             if (!results || results.length === 0) {
                 resultsList.innerHTML = '<p class="text-gray-500 text-center py-8 col-span-full">No results yet</p>';
@@ -210,49 +253,85 @@
                 return;
             }
             
-            results.forEach(result => {
-                console.log("Processing result:", result); // Debug logging
-                
-                const name = result.Name || result.name || 'Unknown';
-                const switchCount = result.SwitchCount !== undefined ? result.SwitchCount : (result.switchCount || 0);
-                const answersList = result.Answers || result.answers || [];
-                
-                console.log(`User: ${name}, Switches: ${switchCount}, Answers:`, answersList); // Debug logging
-                
-                let answersHtml = '';
-                if (answersList && answersList.length > 0) {
-                    answersHtml = answersList.map((a, idx) => {
-                        // Handle both object format {Answer: "text"} and plain string format
-                        let answerText;
-                        if (typeof a === 'string') {
-                            answerText = a;
-                        } else if (a && (a.Answer || a.answer)) {
-                            answerText = a.Answer || a.answer;
-                        } else if (a && typeof a === 'object') {
-                            answerText = JSON.stringify(a);
-                        } else {
-                            answerText = String(a);
-                        }
-                        
-                        // Escape HTML to prevent XSS
-                        const escapedAnswer = answerText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-                        
-                        return `<p class="text-xs text-slate-600">Q${idx + 1}: <span class="font-semibold">${escapedAnswer}</span></p>`;
-                    }).join('');
-                } else {
-                    answersHtml = '<p class="text-xs text-slate-400">No answers submitted</p>';
-                }
-                
-                const card = document.createElement('div');
-                card.className = 'p-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border border-purple-200';
-                card.innerHTML = `
-                    <div class="flex justify-between items-start mb-2">
-                        <div class="font-bold text-lg text-purple-700">${name}</div>
-                        <div class="text-xs bg-orange-200 text-orange-800 px-2 py-1 rounded">?? ${switchCount} switches</div>
-                    </div>
-                    <div class="space-y-1">${answersHtml}</div>`;
-                resultsList.appendChild(card);
-            });
+            // Robust couple mode detection - check multiple indicators
+            const firstResult = results[0];
+            const hasScoreProperty = firstResult.Score !== undefined && firstResult.Score !== null;
+            const hasAnswersProperty = firstResult.Answers !== undefined;
+            const hasSwitchCountProperty = firstResult.SwitchCount !== undefined;
+            const nameStartsWithMrMrs = firstResult.Name && firstResult.Name.startsWith('Mr & Mrs');
+            
+            // Couple mode if: has Score property OR (name starts with Mr & Mrs AND does NOT have Answers property)
+            const isCoupleMode = hasScoreProperty || (nameStartsWithMrMrs && !hasAnswersProperty);
+            
+            console.log("=== MODE DETECTION ===");
+            console.log("Has Score property:", hasScoreProperty);
+            console.log("Has Answers property:", hasAnswersProperty);
+            console.log("Has SwitchCount property:", hasSwitchCountProperty);
+            console.log("Name starts with 'Mr & Mrs':", nameStartsWithMrMrs);
+            console.log("Is couple mode:", isCoupleMode);
+            
+            if (isCoupleMode) {
+                // Simple couple results - just names and scores
+                console.log("=== RENDERING COUPLE MODE ===");
+                results.forEach((result, index) => {
+                    const name = result.Name || result.name || 'Unknown';
+                    const score = result.Score !== undefined ? result.Score : (result.score !== undefined ? result.score : 0);
+                    
+                    console.log(`Couple ${index + 1}: Name="${name}", Score=${score}`);
+                    
+                    const row = document.createElement('div');
+                    row.className = 'flex justify-between items-center p-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border border-purple-200';
+                    row.innerHTML = `
+                        <div class="font-bold text-lg text-pink-700">?? ${name}</div>
+                        <div class="text-3xl font-bold text-purple-700">${score}</div>
+                    `;
+                    resultsList.appendChild(row);
+                });
+            } else {
+                // Individual mode - show with answers
+                console.log("=== RENDERING INDIVIDUAL MODE ===");
+                results.forEach(result => {
+                    const name = result.Name || result.name || 'Unknown';
+                    const switchCount = result.SwitchCount !== undefined ? result.SwitchCount : (result.switchCount || 0);
+                    const answersList = result.Answers || result.answers || [];
+                    
+                    console.log(`User: ${name}, Switches: ${switchCount}, Answers:`, answersList);
+                    
+                    let answersHtml = '';
+                    if (answersList && answersList.length > 0) {
+                        answersHtml = answersList.map((a, idx) => {
+                            let answerText;
+                            
+                            if (typeof a === 'string') {
+                                answerText = a;
+                            } else if (a && (a.Answer || a.answer)) {
+                                answerText = a.Answer || a.answer;
+                            } else if (a && typeof a === 'object') {
+                                answerText = JSON.stringify(a);
+                            } else {
+                                answerText = String(a);
+                            }
+                            
+                            const escapedAnswer = answerText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+                            
+                            return `<p class="text-xs text-slate-600">Q${idx + 1}: <span class="font-semibold">${escapedAnswer}</span></p>`;
+                        }).join('');
+                    } else {
+                        answersHtml = '<p class="text-xs text-slate-400">No answers submitted</p>';
+                    }
+                    
+                    const card = document.createElement('div');
+                    card.className = 'p-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border border-purple-200';
+                    card.innerHTML = `
+                        <div class="flex justify-between items-start mb-2">
+                            <div class="font-bold text-lg text-purple-700">${name}</div>
+                            <div class="text-xs bg-orange-200 text-orange-800 px-2 py-1 rounded">?? ${switchCount} switches</div>
+                        </div>
+                        <div class="space-y-1">${answersHtml}</div>
+                    `;
+                    resultsList.appendChild(card);
+                });
+            }
             
             openResults();
             addActivityLog("?? Results displayed");
@@ -305,21 +384,45 @@
         });
 
         document.getElementById("selectIndividual").addEventListener("click", () => {
+            console.log("Individual button clicked");
+            if (!connection || connection.state !== signalR.HubConnectionState.Connected) {
+                console.error("SignalR not connected");
+                alert("Not connected to server. Please refresh the page.");
+                return;
+            }
+            
             connection.invoke("SetGameMode", "Individual").then(() => {
+                console.log("Game mode set to Individual");
                 document.getElementById("selectIndividual").classList.add("bg-white", "text-purple-700");
                 document.getElementById("selectIndividual").classList.remove("bg-white/20", "text-white");
-                document.getElementById("selectCouple").classList.remove("bg-white", "text-purple-700");
+                document.getElementById("selectCouple").classList.remove("bg-white", "text-pink-700");
                 document.getElementById("selectCouple").classList.add("bg-white/20", "text-white");
-            }).catch(err => console.error(err));
+                addActivityLog("?? Switched to Individual mode");
+            }).catch(err => {
+                console.error("Error setting Individual mode:", err);
+                alert("Error setting game mode: " + err.message);
+            });
         });
 
         document.getElementById("selectCouple").addEventListener("click", () => {
+            console.log("Couple button clicked");
+            if (!connection || connection.state !== signalR.HubConnectionState.Connected) {
+                console.error("SignalR not connected");
+                alert("Not connected to server. Please refresh the page.");
+                return;
+            }
+            
             connection.invoke("SetGameMode", "Couple").then(() => {
+                console.log("Game mode set to Couple");
                 document.getElementById("selectCouple").classList.add("bg-white", "text-pink-700");
                 document.getElementById("selectCouple").classList.remove("bg-white/20", "text-white");
                 document.getElementById("selectIndividual").classList.remove("bg-white", "text-purple-700");
                 document.getElementById("selectIndividual").classList.add("bg-white/20", "text-white");
-            }).catch(err => console.error(err));
+                addActivityLog("?? Switched to Couple mode");
+            }).catch(err => {
+                console.error("Error setting Couple mode:", err);
+                alert("Error setting game mode: " + err.message);
+            });
         });
 
         document.getElementById("generateLink").addEventListener("click", () => {
@@ -338,14 +441,38 @@
         });
 
         document.getElementById("showResults").addEventListener("click", () => {
-            console.log("Show Results button clicked");
+            console.log("=== SHOW RESULTS CLICKED ===");
+            console.log("Connection state:", connection.state);
+            console.log("SignalR connected:", connection.state === signalR.HubConnectionState.Connected);
+            
+            if (!connection || connection.state !== signalR.HubConnectionState.Connected) {
+                console.error("SignalR not connected!");
+                alert("Not connected to server. Please refresh the page.");
+                return;
+            }
+            
+            console.log("Invoking GetAllUserAnswers...");
             connection.invoke("GetAllUserAnswers")
                 .then(results => { 
-                    console.log("GetAllUserAnswers response:", results);
+                    console.log("=== GetAllUserAnswers RESPONSE ===");
+                    console.log("Raw results:", results);
+                    console.log("Results type:", typeof results);
+                    console.log("Results is array:", Array.isArray(results));
+                    console.log("Results length:", results ? results.length : 0);
+                    
+                    if (results && results.length > 0) {
+                        console.log("First result structure:");
+                        console.log("  Keys:", Object.keys(results[0]));
+                        console.log("  Full object:", JSON.stringify(results[0], null, 2));
+                    }
+                    
                     renderResults(results); 
                 })
                 .catch(err => { 
-                    console.error("Error fetching results:", err); 
+                    console.error("=== GetAllUserAnswers ERROR ===");
+                    console.error("Error details:", err); 
+                    console.error("Error message:", err.message);
+                    console.error("Error stack:", err.stack);
                     addActivityLog("? Error displaying results"); 
                     alert("Error fetching results: " + err.message);
                 });
@@ -377,6 +504,9 @@
         }
 
         connection.start().then(() => {
+            console.log("? SignalR connected successfully");
+            addActivityLog("? Connected to server");
+            
             connection.invoke("GetParticipants").then(list => {
                 participants = {};
                 (list || []).forEach(u => {
@@ -387,7 +517,31 @@
                     }
                 });
                 syncParticipantCount();
-            }).catch(err => console.error("GetParticipants error", err));
-        }).catch(err => console.error("SignalR start failed", err));
+                console.log("Loaded participants:", participants);
+            }).catch(err => {
+                console.error("GetParticipants error", err);
+                addActivityLog("? Error loading participants");
+            });
+        }).catch(err => {
+            console.error("? SignalR connection failed:", err);
+            alert("Failed to connect to server: " + err.message + "\n\nPlease refresh the page.");
+        });
+        
+        connection.onclose((error) => {
+            console.error("SignalR connection closed:", error);
+            addActivityLog("? Connection lost");
+            alert("Connection lost. Please refresh the page.");
+        });
+        
+        connection.onreconnecting((error) => {
+            console.warn("SignalR reconnecting:", error);
+            addActivityLog("?? Reconnecting...");
+        });
+        
+        connection.onreconnected((connectionId) => {
+            console.log("SignalR reconnected:", connectionId);
+            addActivityLog("? Reconnected to server");
+        });
+
     </script>
 }

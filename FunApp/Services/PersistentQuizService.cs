@@ -1,6 +1,7 @@
 using FunApp.Models;
 using FunApp.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace FunApp.Services
 {
@@ -8,13 +9,15 @@ namespace FunApp.Services
     {
         private readonly IDbContextFactory<AppDbContext> _factory;
         private readonly QuizService _memory;
+        private readonly ILogger<PersistentQuizService> _logger;
         private readonly object _lock = new();
         private int? _currentSessionId;
 
-        public PersistentQuizService(IDbContextFactory<AppDbContext> factory, QuizService memory)
+        public PersistentQuizService(IDbContextFactory<AppDbContext> factory, QuizService memory, ILogger<PersistentQuizService> logger)
         {
             _factory = factory;
             _memory = memory;
+            _logger = logger;
         }
 
         public int? GetCurrentSessionId()
@@ -121,6 +124,99 @@ namespace FunApp.Services
         {
             using var db = _factory.CreateDbContext();
             return db.Questions.OrderBy(q => q.Id).ToList();
+        }
+
+        // Couple score persistence methods
+        public async Task<CoupleScore> SaveCoupleScoreAsync(string lastName, int questionId, bool answersMatched,
+            string partner1Answer, string partner2Answer)
+        {
+            var session = await EnsureSessionAsync();
+            using var db = _factory.CreateDbContext();
+
+            var coupleScore = new CoupleScore
+            {
+                QuizSessionId = session.Id,
+                LastName = lastName,
+                QuestionId = questionId,
+                AnswersMatched = answersMatched,
+                PointsAwarded = answersMatched ? 1 : 0,
+                Partner1Answer = partner1Answer,
+                Partner2Answer = partner2Answer,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            db.CoupleScores.Add(coupleScore);
+            await db.SaveChangesAsync();
+
+            _logger.LogInformation("[DB SAVE] Saved couple score: SessionId={SessionId}, LastName={LastName}, QuestionId={QuestionId}, Matched={Matched}, Points={Points}",
+                session.Id, lastName, questionId, answersMatched, coupleScore.PointsAwarded);
+
+            return coupleScore;
+        }
+
+        public async Task<List<CoupleScore>> GetCoupleScoresForSessionAsync(int sessionId)
+        {
+            using var db = _factory.CreateDbContext();
+            var scores = await db.CoupleScores
+                .Where(c => c.QuizSessionId == sessionId)
+                .OrderBy(c => c.LastName)
+                .ThenBy(c => c.QuestionId)
+                .ToListAsync();
+
+            _logger.LogInformation("[DB QUERY] GetCoupleScoresForSession({SessionId}): Found {Count} scores", sessionId, scores.Count);
+            return scores;
+        }
+
+        public async Task<Dictionary<string, int>> GetCoupleTotalScoresAsync(int sessionId)
+        {
+            using var db = _factory.CreateDbContext();
+
+            _logger.LogInformation("[GetCoupleTotalScores] Starting query for session {SessionId}", sessionId);
+
+            // First, get all scores to see what's in the database
+            var allScores = await db.CoupleScores
+                .Where(c => c.QuizSessionId == sessionId)
+                .ToListAsync();
+
+            _logger.LogInformation("[GetCoupleTotalScores] Found {Count} total score entries in database", allScores.Count);
+            
+            if (allScores.Count == 0)
+            {
+                _logger.LogWarning("[GetCoupleTotalScores] NO SCORES FOUND IN DATABASE for session {SessionId}!", sessionId);
+                _logger.LogWarning("[GetCoupleTotalScores] This means either:");
+                _logger.LogWarning("[GetCoupleTotalScores]   1. No questions were answered in couple mode, OR");
+                _logger.LogWarning("[GetCoupleTotalScores]   2. SaveCoupleScoreAsync was never called, OR");
+                _logger.LogWarning("[GetCoupleTotalScores]   3. Wrong session ID is being queried");
+            }
+            
+            foreach (var score in allScores)
+            {
+                _logger.LogInformation("[GetCoupleTotalScores]   - LastName='{LastName}', QuestionId={QuestionId}, PointsAwarded={PointsAwarded}",
+                    score.LastName, score.QuestionId, score.PointsAwarded);
+            }
+
+            // Use case-insensitive grouping but preserve original casing
+            var grouped = allScores
+                .GroupBy(c => c.LastName, StringComparer.OrdinalIgnoreCase)
+                .Select(g => new { LastName = g.First().LastName, TotalScore = g.Sum(c => c.PointsAwarded) })
+                .ToList();
+
+            _logger.LogInformation("[GetCoupleTotalScores] Grouped into {Count} couples:", grouped.Count);
+            foreach (var item in grouped)
+            {
+                _logger.LogInformation("[GetCoupleTotalScores]   - '{LastName}': {TotalScore} points", item.LastName, item.TotalScore);
+            }
+
+            // Create result dictionary with case-insensitive key comparer
+            var result = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in grouped)
+            {
+                result[item.LastName] = item.TotalScore;
+            }
+
+            _logger.LogInformation("[GetCoupleTotalScores] Returning {Count} couple totals", result.Count);
+            
+            return result;
         }
     }
 }

@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Couple Score Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@8/dist/browser/signalr.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f0f0f0; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; }
+        .log { background: #f5f5f5; padding: 10px; margin: 10px 0; border-radius: 5px; font-family: monospace; font-size: 12px; max-height: 400px; overflow-y: auto; }
+        .log-entry { padding: 5px; border-bottom: 1px solid #ddd; }
+        .log-info { color: #0066cc; }
+        .log-success { color: #008800; font-weight: bold; }
+        .log-error { color: #cc0000; font-weight: bold; }
+        .log-warning { color: #ff8800; }
+        button { background: #0066cc; color: white; border: none; padding: 10px 20px; margin: 5px; border-radius: 5px; cursor: pointer; }
+        button:hover { background: #0052a3; }
+        button:disabled { background: #cccccc; cursor: not-allowed; }
+        input { padding: 8px; border: 1px solid #ddd; border-radius: 5px; width: 200px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; font-weight: bold; }
+        .status-connected { background: #e8f5e9; color: #2e7d32; }
+        .status-disconnected { background: #ffebee; color: #c62828; }
+        .test-group { background: #f9f9f9; padding: 15px; margin: 10px 0; border-radius: 5px; border-left: 4px solid #0066cc; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>?? Couple Score Diagnostic Test</h1>
+        
+        <div id="status" class="status status-disconnected">
+            ?? Not Connected
+        </div>
+
+        <div class="test-group">
+            <h3>Connection</h3>
+            <p>Server URL: <input type="text" id="serverUrl" value="http://localhost:5000" placeholder="http://localhost:5000"></p>
+            <button id="connectBtn">Connect to Server</button>
+        </div>
+
+        <div class="test-group">
+            <h3>Setup</h3>
+            <button id="setCoupleMode" disabled>1. Set Couple Mode</button>
+            <button id="joinJohn" disabled>2. Join as "John Test"</button>
+            <button id="joinJane" disabled>3. Join as "Jane Test"</button>
+        </div>
+
+        <div class="test-group">
+            <h3>Play Game</h3>
+            <button id="nextQuestion1" disabled>4. Next Question</button>
+            <button id="answerJohn" disabled>5. John Answers "Pizza"</button>
+            <button id="answerJane" disabled>6. Jane Answers "Pizza"</button>
+            <button id="nextQuestion2" disabled>7. Next Question (Evaluate)</button>
+        </div>
+
+        <div class="test-group">
+            <h3>Check Results</h3>
+            <button id="showResults" disabled>8. Show Results</button>
+            <button id="checkAnswers" disabled>Check Current Answers</button>
+        </div>
+
+        <div class="test-group">
+            <h3>Activity Log</h3>
+            <button id="clearLog">Clear Log</button>
+            <div id="log" class="log"></div>
+        </div>
+    </div>
+
+    <script>
+        let connection = null;
+        let johnConnectionId = null;
+        let janeConnectionId = null;
+
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            const timestamp = new Date().toLocaleTimeString();
+            entry.textContent = `[${timestamp}] ${message}`;
+            logDiv.insertBefore(entry, logDiv.firstChild);
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+
+        function updateStatus(connected) {
+            const status = document.getElementById('status');
+            if (connected) {
+                status.className = 'status status-connected';
+                status.textContent = '? Connected to Server';
+            } else {
+                status.className = 'status status-disconnected';
+                status.textContent = '?? Not Connected';
+            }
+            
+            // Enable/disable buttons
+            const buttons = ['setCoupleMode', 'joinJohn', 'joinJane', 'nextQuestion1', 
+                            'answerJohn', 'answerJane', 'nextQuestion2', 'showResults', 'checkAnswers'];
+            buttons.forEach(id => {
+                document.getElementById(id).disabled = !connected;
+            });
+        }
+
+        document.getElementById('connectBtn').addEventListener('click', async () => {
+            const serverUrl = document.getElementById('serverUrl').value;
+            log(`Connecting to ${serverUrl}...`, 'info');
+            
+            try {
+                if (connection) {
+                    await connection.stop();
+                }
+
+                connection = new signalR.HubConnectionBuilder()
+                    .withUrl(`${serverUrl}/quizHub`)
+                    .withAutomaticReconnect()
+                    .build();
+
+                connection.on("NewQuestion", (question) => {
+                    log(`?? New Question: ${question}`, 'success');
+                });
+
+                connection.on("GameModeChanged", (mode) => {
+                    log(`?? Game Mode Changed: ${mode}`, 'success');
+                });
+
+                connection.on("UserJoined", (user) => {
+                    log(`?? User Joined: ${user.Name || user.name}`, 'success');
+                });
+
+                connection.on("CoupleFormed", (data) => {
+                    log(`?? Couple Formed: Mr & Mrs ${data.LastName}`, 'success');
+                });
+
+                connection.on("AnswerReceived", (answer) => {
+                    if (answer && answer.User) {
+                        log(`?? Answer Received from ${answer.User.Name || answer.User.name}`, 'info');
+                    }
+                });
+
+                await connection.start();
+                log('? Connected successfully!', 'success');
+                updateStatus(true);
+
+            } catch (err) {
+                log(`? Connection failed: ${err.message}`, 'error');
+                updateStatus(false);
+            }
+        });
+
+        document.getElementById('setCoupleMode').addEventListener('click', async () => {
+            try {
+                log('Setting game mode to Couple...', 'info');
+                await connection.invoke("SetGameMode", "Couple");
+                log('? Couple mode set', 'success');
+            } catch (err) {
+                log(`? Error: ${err.message}`, 'error');
+            }
+        });
+
+        document.getElementById('joinJohn').addEventListener('click', async () => {
+            try {
+                log('John Test joining...', 'info');
+                await connection.invoke("JoinQuiz", "John Test");
+                johnConnectionId = connection.connectionId;
+                log(`? John joined (Connection: ${johnConnectionId.substring(0, 8)}...)`, 'success');
+            } catch (err) {
+                log(`? Error: ${err.message}`, 'error');
+            }
+        });
+
+        document.getElementById('joinJane').addEventListener('click', async () => {
+            try {
+                log('Jane Test joining...', 'info');
+                await connection.invoke("JoinQuiz", "Jane Test");
+                janeConnectionId = connection.connectionId;
+                log(`? Jane joined (Connection: ${janeConnectionId.substring(0, 8)}...)`, 'success');
+            } catch (err) {
+                log(`? Error: ${err.message}`, 'error');
+            }
+        });
+
+        document.getElementById('nextQuestion1').addEventListener('click', async () => {
+            try {
+                log('Getting next question...', 'info');
+                await connection.invoke("NextQuestion");
+            } catch (err) {
+                log(`? Error: ${err.message}`, 'error');
+            }
+        });
+
+        document.getElementById('answerJohn').addEventListener('click', async () => {
+            try {
+                log('John answering "Pizza"...', 'info');
+                await connection.invoke("SubmitAnswer", "Pizza");
+                log('? John\'s answer submitted', 'success');
+            } catch (err) {
+                log(`? Error: ${err.message}`, 'error');
+            }
+        });
+
+        document.getElementById('answerJane').addEventListener('click', async () => {
+            try {
+                log('Jane answering "Pizza"...', 'info');
+                // Note: Jane would need her own connection, this is simplified
+                log('?? Note: This test uses one connection. In real game, Jane would answer from separate device.', 'warning');
+                await connection.invoke("SubmitAnswer", "Pizza");
+                log('? Jane\'s answer submitted', 'success');
+            } catch (err) {
+                log(`? Error: ${err.message}`, 'error');
+            }
+        });
+
+        document.getElementById('nextQuestion2').addEventListener('click', async () => {
+            try {
+                log('Advancing to next question (this evaluates previous answers)...', 'info');
+                await connection.invoke("NextQuestion");
+                log('?? Check server logs for: [DB SAVE] messages', 'warning');
+            } catch (err) {
+                log(`? Error: ${err.message}`, 'error');
+            }
+        });
+
+        document.getElementById('showResults').addEventListener('click', async () => {
+            try {
+                log('Getting all user answers...', 'info');
+                const results = await connection.invoke("GetAllUserAnswers");
+                log('? Results received:', 'success');
+                log(JSON.stringify(results, null, 2), 'info');
+                
+                if (results && results.length > 0) {
+                    results.forEach((result, idx) => {
+                        const name = result.Name || result.name || 'Unknown';
+                        const score = result.Score !== undefined ? result.Score : '(no score property)';
+                        log(`  Couple ${idx + 1}: ${name} - Score: ${score}`, 'success');
+                    });
+                } else {
+                    log('?? No results returned!', 'warning');
+                }
+            } catch (err) {
+                log(`? Error: ${err.message}`, 'error');
+            }
+        });
+
+        document.getElementById('checkAnswers').addEventListener('click', async () => {
+            try {
+                log('Getting current answers...', 'info');
+                const answers = await connection.invoke("GetCurrentAnswers");
+                log('Current answers:', 'info');
+                log(JSON.stringify(answers, null, 2), 'info');
+            } catch (err) {
+                log(`? Error: ${err.message}`, 'error');
+            }
+        });
+
+        document.getElementById('clearLog').addEventListener('click', () => {
+            document.getElementById('log').innerHTML = '';
+        });
+
+        log('?? Ready to test! Start by connecting to the server.', 'info');
+        log('Make sure your FunApp is running first!', 'warning');
+    </script>
+</body>
+</html>

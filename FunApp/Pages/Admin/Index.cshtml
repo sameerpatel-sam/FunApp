@@ -74,8 +74,26 @@
         connection.on('QuestionsUpdated',(mode,questions)=>{renderQuestions(mode,questions);});
 
         function loadAll(){
-            connection.invoke('GetQuestions','Individual').then(q=>renderQuestions('Individual',q));
-            connection.invoke('GetQuestions','Couple').then(q=>renderQuestions('Couple',q));
+            console.log("Loading questions from database...");
+            connection.invoke('GetQuestions','Individual')
+                .then(q => {
+                    console.log("Loaded Individual questions:", q);
+                    renderQuestions('Individual',q);
+                })
+                .catch(err => {
+                    console.error("Error loading Individual questions:", err);
+                    alert("Error loading Individual questions: " + err.message);
+                });
+                
+            connection.invoke('GetQuestions','Couple')
+                .then(q => {
+                    console.log("Loaded Couple questions:", q);
+                    renderQuestions('Couple',q);
+                })
+                .catch(err => {
+                    console.error("Error loading Couple questions:", err);
+                    alert("Error loading Couple questions: " + err.message);
+                });
         }
 
         document.getElementById('addIndividual').addEventListener('click',()=>{
@@ -108,6 +126,27 @@
         document.getElementById('endQuiz').addEventListener('click',()=>connection.invoke('EndQuiz').catch(console.error));
         document.getElementById('refreshLists').addEventListener('click',loadAll);
 
-        connection.start().then(loadAll).catch(console.error);
+        connection.start().then(() => {
+            console.log("? SignalR connected successfully");
+            console.log("Loading questions...");
+            loadAll();
+        }).catch(err => {
+            console.error("? SignalR connection failed:", err);
+            alert("Failed to connect to server: " + err.message);
+        });
+        
+        connection.onclose((error) => {
+            console.error("SignalR connection closed:", error);
+            alert("Connection lost. Please refresh the page.");
+        });
+        
+        connection.onreconnecting((error) => {
+            console.warn("SignalR reconnecting:", error);
+        });
+        
+        connection.onreconnected((connectionId) => {
+            console.log("SignalR reconnected:", connectionId);
+            loadAll(); // Reload questions after reconnection
+        });
     </script>
 }
