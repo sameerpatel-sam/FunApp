@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Page Diagnostic</title>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+            background: #1e1e1e;
+            color: #d4d4d4;
+        }
+        .test {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .pass {
+            background: #1e3a1e;
+            color: #4ec94e;
+        }
+        .fail {
+            background: #3a1e1e;
+            color: #f48771;
+        }
+        .info {
+            background: #1e2a3a;
+            color: #4e9cf4;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+            border: none;
+            border-radius: 4px;
+            background: #0e639c;
+            color: white;
+            font-size: 14px;
+        }
+        button:hover {
+            background: #1177bb;
+        }
+        #output {
+            white-space: pre-wrap;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>?? Admin Page Diagnostic Tool</h1>
+    <p>Use this to diagnose why buttons aren't working on the Admin page</p>
+
+    <div>
+        <button onclick="runFullDiagnostic()">?? Run Full Diagnostic</button>
+        <button onclick="testSignalR()">?? Test SignalR</button>
+        <button onclick="testInvoke()">? Test Invoke</button>
+        <button onclick="clearOutput()">??? Clear</button>
+    </div>
+
+    <div id="output"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@8/dist/browser/signalr.js"></script>
+    <script>
+        let connection;
+        const output = document.getElementById('output');
+
+        function log(message, type = 'info') {
+            const div = document.createElement('div');
+            div.className = `test ${type}`;
+            div.textContent = message;
+            output.appendChild(div);
+        }
+
+        function clearOutput() {
+            output.innerHTML = '';
+        }
+
+        async function runFullDiagnostic() {
+            clearOutput();
+            log('?? Starting full diagnostic...', 'info');
+            log('???????????????????????????????????????', 'info');
+
+            // Test 1: SignalR library loaded
+            if (typeof signalR !== 'undefined') {
+                log('? Test 1: SignalR library loaded', 'pass');
+            } else {
+                log('? Test 1: SignalR library NOT loaded', 'fail');
+                log('   Fix: Check internet connection', 'fail');
+                return;
+            }
+
+            // Test 2: Can create connection
+            try {
+                connection = new signalR.HubConnectionBuilder()
+                    .withUrl("/quizHub")
+                    .withAutomaticReconnect()
+                    .build();
+                log('? Test 2: Connection object created', 'pass');
+            } catch (err) {
+                log('? Test 2: Failed to create connection', 'fail');
+                log(`   Error: ${err.message}`, 'fail');
+                return;
+            }
+
+            // Test 3: Can connect to hub
+            log('? Test 3: Connecting to QuizHub...', 'info');
+            try {
+                await connection.start();
+                log('? Test 3: Connected to QuizHub', 'pass');
+                log(`   Connection ID: ${connection.connectionId}`, 'pass');
+            } catch (err) {
+                log('? Test 3: Failed to connect', 'fail');
+                log(`   Error: ${err.message}`, 'fail');
+                log('   Possible causes:', 'fail');
+                log('   - App not running (run "dotnet run")', 'fail');
+                log('   - Wrong URL (should be localhost:5000)', 'fail');
+                log('   - Hub endpoint not mapped in Program.cs', 'fail');
+                return;
+            }
+
+            // Test 4: Can invoke GetQuestions
+            log('? Test 4: Testing GetQuestions invoke...', 'info');
+            try {
+                const questions = await connection.invoke('GetQuestions', 'Individual');
+                log('? Test 4: GetQuestions worked', 'pass');
+                log(`   Found ${questions.length} Individual questions`, 'pass');
+            } catch (err) {
+                log('? Test 4: GetQuestions failed', 'fail');
+                log(`   Error: ${err.message}`, 'fail');
+            }
+
+            // Test 5: Can invoke AddQuestion
+            log('? Test 5: Testing AddQuestion invoke...', 'info');
+            try {
+                await connection.invoke('AddQuestion', 'Test Question', 'Individual', 'Test Answer');
+                log('? Test 5: AddQuestion worked', 'pass');
+                log('   NOTE: A test question was added - you may want to delete it', 'info');
+            } catch (err) {
+                log('? Test 5: AddQuestion failed', 'fail');
+                log(`   Error: ${err.message}`, 'fail');
+            }
+
+            // Test 6: Check connection state
+            log(`? Test 6: Connection state: ${connection.state}`, 
+                connection.state === 'Connected' ? 'pass' : 'fail');
+
+            log('???????????????????????????????????????', 'info');
+            log('?? Diagnostic complete!', 'info');
+
+            if (connection.state === 'Connected') {
+                log('', 'info');
+                log('?? SUMMARY: All tests passed! ?', 'pass');
+                log('   If buttons still not working:', 'info');
+                log('   1. Check browser console (F12) for errors', 'info');
+                log('   2. Make sure you\'re on the actual Admin page', 'info');
+                log('   3. Try hard refresh (Ctrl+Shift+R)', 'info');
+            } else {
+                log('', 'info');
+                log('?? SUMMARY: Connection failed ?', 'fail');
+                log('   Quick fix:', 'fail');
+                log('   1. Make sure app is running: dotnet run', 'fail');
+                log('   2. Check terminal for errors', 'fail');
+                log('   3. Restart the app', 'fail');
+            }
+        }
+
+        async function testSignalR() {
+            clearOutput();
+            log('?? Testing SignalR connection...', 'info');
+
+            if (typeof signalR === 'undefined') {
+                log('? SignalR library not loaded!', 'fail');
+                log('   Check internet connection', 'fail');
+                return;
+            }
+
+            try {
+                connection = new signalR.HubConnectionBuilder()
+                    .withUrl("/quizHub")
+                    .build();
+
+                log('? Connecting...', 'info');
+                await connection.start();
+                log('? Connected successfully!', 'pass');
+                log(`   Connection ID: ${connection.connectionId}`, 'pass');
+                log(`   State: ${connection.state}`, 'pass');
+            } catch (err) {
+                log('? Connection failed!', 'fail');
+                log(`   Error: ${err.message}`, 'fail');
+            }
+        }
+
+        async function testInvoke() {
+            clearOutput();
+            log('? Testing invoke methods...', 'info');
+
+            if (!connection || connection.state !== 'Connected') {
+                log('? Not connected! Run "Test SignalR" first', 'fail');
+                return;
+            }
+
+            // Test GetQuestions
+            try {
+                log('? Testing GetQuestions...', 'info');
+                const individual = await connection.invoke('GetQuestions', 'Individual');
+                log(`? GetQuestions (Individual): ${individual.length} questions`, 'pass');
+
+                const couple = await connection.invoke('GetQuestions', 'Couple');
+                log(`? GetQuestions (Couple): ${couple.length} questions`, 'pass');
+            } catch (err) {
+                log('? GetQuestions failed!', 'fail');
+                log(`   Error: ${err.message}`, 'fail');
+            }
+
+            // Test GetParticipants
+            try {
+                log('? Testing GetParticipants...', 'info');
+                const participants = await connection.invoke('GetParticipants');
+                log(`? GetParticipants: ${participants.length} participants`, 'pass');
+            } catch (err) {
+                log('? GetParticipants failed!', 'fail');
+                log(`   Error: ${err.message}`, 'fail');
+            }
+
+            log('?? Invoke tests complete!', 'info');
+        }
+
+        // Run diagnostic on load
+        window.addEventListener('load', () => {
+            log('?? Admin Diagnostic Tool Ready', 'info');
+            log('Click "Run Full Diagnostic" to start', 'info');
+            log('???????????????????????????????????????', 'info');
+        });
+    </script>
+</body>
+</html>

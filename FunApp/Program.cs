@@ -79,6 +79,36 @@ using (var scope = app.Services.CreateScope())
                 needsRecreation = true;
             }
         }
+        
+        // Third check: Does SpellWords table exist?
+        if (!needsRecreation)
+        {
+            try
+            {
+                _ = db.SpellWords.Take(1).Any();
+            }
+            catch
+            {
+                // SpellWords table missing - need to recreate
+                app.Logger.LogWarning("SpellWords table not found. Database needs migration.");
+                needsRecreation = true;
+            }
+        }
+        
+        // Fourth check: Does SpellWordScores table exist?
+        if (!needsRecreation)
+        {
+            try
+            {
+                _ = db.SpellWordScores.Take(1).Any();
+            }
+            catch
+            {
+                // SpellWordScores table missing - need to recreate
+                app.Logger.LogWarning("SpellWordScores table not found. Database needs migration.");
+                needsRecreation = true;
+            }
+        }
     } // Dispose db context here to release file locks
     
     // Recreate database if needed
@@ -96,7 +126,7 @@ using (var scope = app.Services.CreateScope())
                 db.Database.EnsureDeleted();
                 db.Database.EnsureCreated();
             }
-            app.Logger.LogInformation("✅ Database recreated successfully with CoupleScores table.");
+            app.Logger.LogInformation("✅ Database recreated successfully with all tables including SpellWords and SpellWordScores.");
         }
         catch (IOException ioEx) when (ioEx.Message.Contains("being used by another process"))
         {
@@ -128,7 +158,9 @@ using (var scope = app.Services.CreateScope())
     {
         var individualCount = db.Questions.Count(q => q.GameMode == GameMode.Individual);
         var coupleCount = db.Questions.Count(q => q.GameMode == GameMode.Couple);
-        app.Logger.LogInformation("DB question counts: Individual={IndividualCount}, Couple={CoupleCount}", individualCount, coupleCount);
+        var spellWordCount = db.SpellWords.Count();
+        app.Logger.LogInformation("DB counts: Individual={IndividualCount}, Couple={CoupleCount}, SpellWords={SpellWordCount}", 
+            individualCount, coupleCount, spellWordCount);
     }
 }
 
@@ -164,5 +196,114 @@ app.MapRazorPages();
 app.MapHub<QuizHub>("/quizHub");
 app.MapGet("/health", () => Results.Ok("OK"));
 
+// SpellWord API endpoints
+app.MapGet("/api/spellword/words", async (IDbContextFactory<AppDbContext> dbFactory) =>
+{
+    using var db = dbFactory.CreateDbContext();
+    var words = await db.SpellWords
+        .OrderBy(w => w.Id)
+        .Select(w => new
+        {
+            w.Id,
+            w.Word,
+            w.IsRevealed,
+            Score = db.SpellWordScores
+                .Where(s => s.SpellWordId == w.Id)
+                .Select(s => new { s.TeamAScore, s.TeamBScore })
+                .FirstOrDefault()
+        })
+        .ToListAsync();
+    return Results.Ok(words);
+});
+
+app.MapPost("/api/spellword/words", async (IDbContextFactory<AppDbContext> dbFactory, SpellWordRequest request) =>
+{
+    if (string.IsNullOrWhiteSpace(request.Word))
+        return Results.BadRequest("Word is required");
+    
+    using var db = dbFactory.CreateDbContext();
+    var word = new SpellWord { Word = request.Word.Trim() };
+    db.SpellWords.Add(word);
+    await db.SaveChangesAsync();
+    return Results.Ok(new { word.Id, word.Word, word.IsRevealed });
+});
+
+app.MapDelete("/api/spellword/words/{id}", async (IDbContextFactory<AppDbContext> dbFactory, int id) =>
+{
+    using var db = dbFactory.CreateDbContext();
+    var word = await db.SpellWords.FindAsync(id);
+    if (word == null)
+        return Results.NotFound();
+    
+    db.SpellWords.Remove(word);
+    await db.SaveChangesAsync();
+    return Results.Ok();
+});
+
+app.MapPost("/api/spellword/reveal/{id}", async (IDbContextFactory<AppDbContext> dbFactory, int id) =>
+{
+    using var db = dbFactory.CreateDbContext();
+    var word = await db.SpellWords.FindAsync(id);
+    if (word == null)
+        return Results.NotFound();
+    
+    word.IsRevealed = true;
+    
+    // Create score entry if it doesn't exist
+    var scoreExists = await db.SpellWordScores.AnyAsync(s => s.SpellWordId == id);
+    if (!scoreExists)
+    {
+        db.SpellWordScores.Add(new SpellWordScore { SpellWordId = id });
+    }
+    
+    await db.SaveChangesAsync();
+    return Results.Ok(new { word.Id, word.Word, word.IsRevealed });
+});
+
+app.MapPost("/api/spellword/score", async (IDbContextFactory<AppDbContext> dbFactory, SpellWordScoreRequest request) =>
+{
+    using var db = dbFactory.CreateDbContext();
+    var score = await db.SpellWordScores.FirstOrDefaultAsync(s => s.SpellWordId == request.SpellWordId);
+    
+    if (score == null)
+    {
+        score = new SpellWordScore { SpellWordId = request.SpellWordId };
+        db.SpellWordScores.Add(score);
+    }
+    
+    if (request.Team == "A")
+        score.TeamAScore = request.Score;
+    else if (request.Team == "B")
+        score.TeamBScore = request.Score;
+    
+    await db.SaveChangesAsync();
+    return Results.Ok();
+});
+
+app.MapPost("/api/spellword/reset", async (IDbContextFactory<AppDbContext> dbFactory) =>
+{
+    using var db = dbFactory.CreateDbContext();
+    var words = await db.SpellWords.ToListAsync();
+    foreach (var word in words)
+    {
+        word.IsRevealed = false;
+    }
+    await db.SaveChangesAsync();
+    return Results.Ok();
+});
+
+app.MapPost("/api/spellword/clear-scores", async (IDbContextFactory<AppDbContext> dbFactory) =>
+{
+    using var db = dbFactory.CreateDbContext();
+    var scores = await db.SpellWordScores.ToListAsync();
+    db.SpellWordScores.RemoveRange(scores);
+    await db.SaveChangesAsync();
+    return Results.Ok();
+});
+
 app.Run();
+
+// Request DTOs for SpellWord endpoints
+record SpellWordRequest(string Word);
+record SpellWordScoreRequest(int SpellWordId, string Team, int Score);
 

@@ -12,6 +12,8 @@ namespace FunApp.Data
         public DbSet<QuizResponse> QuizResponses => Set<QuizResponse>();
         public DbSet<CoupleScore> CoupleScores => Set<CoupleScore>();
         public DbSet<IndividualScore> IndividualScores => Set<IndividualScore>();
+        public DbSet<SpellWord> SpellWords => Set<SpellWord>();
+        public DbSet<SpellWordScore> SpellWordScores => Set<SpellWordScore>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -59,6 +61,23 @@ namespace FunApp.Data
                 e.Property(i => i.PointsAwarded).IsRequired();
                 e.HasOne<QuizSession>().WithMany().HasForeignKey(i => i.QuizSessionId).OnDelete(DeleteBehavior.Cascade);
                 e.HasOne<Question>().WithMany().HasForeignKey(i => i.QuestionId).OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<SpellWord>(e =>
+            {
+                e.HasKey(s => s.Id);
+                e.Property(s => s.Word).IsRequired();
+                e.Property(s => s.IsRevealed).HasDefaultValue(false);
+                e.Property(s => s.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            });
+
+            modelBuilder.Entity<SpellWordScore>(e =>
+            {
+                e.HasKey(s => s.Id);
+                e.Property(s => s.TeamAScore).HasDefaultValue(0);
+                e.Property(s => s.TeamBScore).HasDefaultValue(0);
+                e.Property(s => s.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                e.HasOne<SpellWord>().WithMany().HasForeignKey(s => s.SpellWordId).OnDelete(DeleteBehavior.Cascade);
             });
         }
     }

@@ -83,4 +83,22 @@ namespace FunApp.Models
         public int PointsAwarded { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
+
+    // Spell the Word Game Models
+    public class SpellWord
+    {
+        public int Id { get; set; }
+        public string Word { get; set; } = string.Empty;
+        public bool IsRevealed { get; set; } = false;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    public class SpellWordScore
+    {
+        public int Id { get; set; }
+        public int SpellWordId { get; set; }
+        public int TeamAScore { get; set; } = 0;
+        public int TeamBScore { get; set; } = 0;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    }
 }

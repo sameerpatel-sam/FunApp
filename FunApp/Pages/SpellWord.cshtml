@@ -1,0 +1,365 @@
+@page
+@model FunApp.Pages.SpellWordModel
+@{
+    ViewData["Title"] = "Spell the Word";
+}
+
+<div class="min-h-screen bg-gradient-to-b from-blue-700 via-teal-600 to-green-500 p-6 text-white">
+    <div class="max-w-6xl mx-auto space-y-10">
+        <div class="flex justify-between items-center">
+            <h1 class="text-3xl font-extrabold">Spell the Word Game</h1>
+            <div class="flex gap-2">
+                <button id="toggleAdmin" class="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg hover:scale-[1.05] transition">
+                    ?? Show Admin Controls
+                </button>
+                <a asp-page="/Index" class="px-4 py-2 bg-white text-blue-700 font-semibold rounded-lg hover:scale-[1.05] transition">? Back to Quiz</a>
+                <a asp-page="/Admin" class="px-4 py-2 bg-white/30 hover:bg-white/50 rounded-lg font-semibold">Manage</a>
+            </div>
+        </div>
+
+        <!-- Main Game Area -->
+        <div class="grid lg:grid-cols-3 gap-8">
+            <!-- Left: Word Display and Controls -->
+            <div class="lg:col-span-3 space-y-6">
+                <!-- Ready to Spell Display -->
+                <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/20 text-center">
+                    <div id="wordStatus" class="text-4xl font-bold mb-6">Ready to Spell the Word</div>
+                    <div id="wordDisplay" class="text-6xl font-black tracking-wider hidden min-h-[100px] flex items-center justify-center"></div>
+                    <button id="revealWord" class="px-8 py-4 bg-yellow-400 text-yellow-900 font-bold text-xl rounded-lg shadow-lg hover:scale-[1.05] transition">
+                        ?? Reveal Word
+                    </button>
+                </div>
+
+                <!-- Score Table -->
+                <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
+                    <h2 class="text-2xl font-bold mb-4">Score Board</h2>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left">
+                            <thead>
+                                <tr class="border-b-2 border-white/30">
+                                    <th class="py-3 px-4 text-lg font-bold">Word</th>
+                                    <th class="py-3 px-4 text-lg font-bold text-center">Team A</th>
+                                    <th class="py-3 px-4 text-lg font-bold text-center">Team B</th>
+                                </tr>
+                            </thead>
+                            <tbody id="scoreTableBody" class="divide-y divide-white/20">
+                                <!-- Scores will be added dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right: Admin Controls (HIDDEN BY DEFAULT) -->
+            <div id="adminPanel" class="lg:col-span-3 space-y-6 hidden">
+                <div class="bg-red-900/30 border-2 border-red-500 rounded-2xl p-4 text-center">
+                    <p class="text-lg font-bold">?? ADMIN CONTROLS VISIBLE</p>
+                    <p class="text-sm">Hide this panel before showing to participants!</p>
+                    <button id="hideAdmin" class="mt-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg">
+                        ?? Hide Admin Controls
+                    </button>
+                </div>
+
+                <div class="grid lg:grid-cols-2 gap-6">
+                    <!-- Manage Words -->
+                    <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
+                        <h2 class="text-xl font-bold mb-4">Manage Words</h2>
+                        <div class="space-y-3">
+                            <input id="newWord" placeholder="Enter a word" class="w-full rounded px-3 py-2 text-black font-semibold" />
+                            <button id="addWord" class="w-full px-4 py-3 bg-green-400 text-green-900 font-bold rounded-lg hover:scale-[1.05] transition">
+                                ? Add Word
+                            </button>
+                        </div>
+                        <div id="wordsList" class="mt-4 space-y-2 max-h-96 overflow-y-auto"></div>
+                    </div>
+
+                    <!-- Game Controls -->
+                    <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
+                        <h2 class="text-xl font-bold mb-4">Game Controls</h2>
+                        <div class="space-y-3">
+                            <button id="resetGame" class="w-full px-4 py-3 bg-orange-500 text-white font-bold rounded-lg hover:scale-[1.05] transition">
+                                ?? Reset Game
+                            </button>
+                            <button id="clearScores" class="w-full px-4 py-3 bg-red-600 text-white font-bold rounded-lg hover:scale-[1.05] transition">
+                                ??? Clear All Scores
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        let currentWordId = null;
+        let allWords = [];
+
+        // Toggle admin panel
+        document.getElementById('toggleAdmin').addEventListener('click', () => {
+            const panel = document.getElementById('adminPanel');
+            const button = document.getElementById('toggleAdmin');
+            
+            if (panel.classList.contains('hidden')) {
+                // Show admin controls with confirmation
+                if (confirm('?? WARNING: This will show ALL words including unrevealed ones!\n\nMake sure participants cannot see the screen.\n\nContinue?')) {
+                    panel.classList.remove('hidden');
+                    button.textContent = '?? Admin Controls Visible';
+                    button.classList.add('bg-red-600');
+                    button.classList.remove('bg-orange-500');
+                }
+            }
+        });
+
+        document.getElementById('hideAdmin').addEventListener('click', () => {
+            const panel = document.getElementById('adminPanel');
+            const button = document.getElementById('toggleAdmin');
+            panel.classList.add('hidden');
+            button.textContent = '?? Show Admin Controls';
+            button.classList.remove('bg-red-600');
+            button.classList.add('bg-orange-500');
+        });
+
+        // Load words from database
+        async function loadWords() {
+            try {
+                const response = await fetch('/api/spellword/words');
+                if (!response.ok) {
+                    console.error('Failed to load words:', response.status, response.statusText);
+                    return;
+                }
+                allWords = await response.json();
+                renderWordsList();
+                renderScoreTable();
+            } catch (err) {
+                console.error('Error loading words:', err);
+            }
+        }
+
+        // Render words list in management panel
+        function renderWordsList() {
+            const container = document.getElementById('wordsList');
+            container.innerHTML = '';
+            
+            if (allWords.length === 0) {
+                container.innerHTML = '<div class="text-sm text-white/70 text-center py-4">No words added yet</div>';
+                return;
+            }
+
+            allWords.forEach(word => {
+                const div = document.createElement('div');
+                div.className = 'flex gap-2 items-center bg-white/5 p-3 rounded-lg';
+                div.innerHTML = `
+                    <span class="flex-1 font-semibold">${word.word}</span>
+                    <button onclick="deleteWord(${word.id})" class="px-3 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600">
+                        Delete
+                    </button>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        // Render score table
+        function renderScoreTable() {
+            const tbody = document.getElementById('scoreTableBody');
+            tbody.innerHTML = '';
+
+            // Filter to only show revealed words
+            const revealedWords = allWords.filter(w => w.isRevealed);
+
+            if (revealedWords.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="3" class="text-center py-4 text-white/70">No words revealed yet</td></tr>';
+                return;
+            }
+
+            revealedWords.forEach(word => {
+                const tr = document.createElement('tr');
+                const score = word.score || { teamAScore: 0, teamBScore: 0 };
+                
+                tr.innerHTML = `
+                    <td class="py-3 px-4 font-semibold">${word.word}</td>
+                    <td class="py-3 px-4 text-center">
+                        <input type="number" 
+                               value="${score.teamAScore}" 
+                               data-word-id="${word.id}" 
+                               data-team="A" 
+                               class="w-20 px-2 py-1 rounded text-black text-center font-bold"
+                               onchange="updateScore(this)" />
+                    </td>
+                    <td class="py-3 px-4 text-center">
+                        <input type="number" 
+                               value="${score.teamBScore}" 
+                               data-word-id="${word.id}" 
+                               data-team="B" 
+                               class="w-20 px-2 py-1 rounded text-black text-center font-bold"
+                               onchange="updateScore(this)" />
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // Add new word
+        document.getElementById('addWord').addEventListener('click', async () => {
+            const input = document.getElementById('newWord');
+            const word = input.value.trim();
+            
+            if (!word) {
+                alert('Please enter a word');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/spellword/words', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ Word: word })
+                });
+
+                if (response.ok) {
+                    input.value = '';
+                    await loadWords();
+                } else {
+                    const errorText = await response.text();
+                    console.error('Server error:', errorText);
+                    alert('Error adding word: ' + errorText);
+                }
+            } catch (err) {
+                console.error('Error adding word:', err);
+                alert('Error adding word: ' + err.message);
+            }
+        });
+
+        // Delete word
+        window.deleteWord = async function(wordId) {
+            if (!confirm('Delete this word?')) return;
+
+            try {
+                const response = await fetch(`/api/spellword/words/${wordId}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    await loadWords();
+                } else {
+                    alert('Error deleting word');
+                }
+            } catch (err) {
+                console.error('Error deleting word:', err);
+                alert('Error deleting word');
+            }
+        };
+
+        // Reveal random word
+        document.getElementById('revealWord').addEventListener('click', async () => {
+            // Get unrevealed words
+            const unrevealedWords = allWords.filter(w => !w.isRevealed);
+            
+            if (unrevealedWords.length === 0) {
+                alert('No more words to reveal! Please add more words or reset the game.');
+                return;
+            }
+
+            // Pick random word
+            const randomWord = unrevealedWords[Math.floor(Math.random() * unrevealedWords.length)];
+            
+            try {
+                const response = await fetch(`/api/spellword/reveal/${randomWord.id}`, {
+                    method: 'POST'
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    // Update display
+                    document.getElementById('wordStatus').classList.add('hidden');
+                    document.getElementById('wordDisplay').textContent = data.word;
+                    document.getElementById('wordDisplay').classList.remove('hidden');
+                    
+                    currentWordId = data.id;
+                    await loadWords();
+                } else {
+                    alert('Error revealing word');
+                }
+            } catch (err) {
+                console.error('Error revealing word:', err);
+                alert('Error revealing word');
+            }
+        });
+
+        // Update score
+        window.updateScore = async function(input) {
+            const wordId = parseInt(input.dataset.wordId);
+            const team = input.dataset.team;
+            const score = parseInt(input.value) || 0;
+
+            try {
+                const response = await fetch('/api/spellword/score', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        SpellWordId: wordId,
+                        Team: team,
+                        Score: score
+                    })
+                });
+
+                if (response.ok) {
+                    await loadWords();
+                } else {
+                    alert('Error updating score');
+                }
+            } catch (err) {
+                console.error('Error updating score:', err);
+                alert('Error updating score');
+            }
+        };
+
+        // Reset game
+        document.getElementById('resetGame').addEventListener('click', async () => {
+            if (!confirm('Reset game? This will mark all words as unrevealed but keep the words and scores.')) return;
+
+            try {
+                const response = await fetch('/api/spellword/reset', {
+                    method: 'POST'
+                });
+
+                if (response.ok) {
+                    document.getElementById('wordStatus').classList.remove('hidden');
+                    document.getElementById('wordDisplay').classList.add('hidden');
+                    currentWordId = null;
+                    await loadWords();
+                } else {
+                    alert('Error resetting game');
+                }
+            } catch (err) {
+                console.error('Error resetting game:', err);
+                alert('Error resetting game');
+            }
+        });
+
+        // Clear all scores
+        document.getElementById('clearScores').addEventListener('click', async () => {
+            if (!confirm('Clear all scores? This will remove all score data but keep the words.')) return;
+
+            try {
+                const response = await fetch('/api/spellword/clear-scores', {
+                    method: 'POST'
+                });
+
+                if (response.ok) {
+                    await loadWords();
+                } else {
+                    alert('Error clearing scores');
+                }
+            } catch (err) {
+                console.error('Error clearing scores:', err);
+                alert('Error clearing scores');
+            }
+        });
+
+        // Load words on page load
+        loadWords();
+    </script>
+}
