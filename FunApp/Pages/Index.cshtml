@@ -260,8 +260,10 @@
             const hasSwitchCountProperty = firstResult.SwitchCount !== undefined;
             const nameStartsWithMrMrs = firstResult.Name && firstResult.Name.startsWith('Mr & Mrs');
             
-            // Couple mode if: has Score property OR (name starts with Mr & Mrs AND does NOT have Answers property)
-            const isCoupleMode = hasScoreProperty || (nameStartsWithMrMrs && !hasAnswersProperty);
+            // Couple mode if: name starts with Mr & Mrs AND does NOT have Answers property
+            // Individual mode with scores if: has Score property AND has SwitchCount property
+            const isCoupleMode = nameStartsWithMrMrs && !hasSwitchCountProperty;
+            const isIndividualWithScores = hasScoreProperty && hasSwitchCountProperty;
             
             console.log("=== MODE DETECTION ===");
             console.log("Has Score property:", hasScoreProperty);
@@ -269,6 +271,7 @@
             console.log("Has SwitchCount property:", hasSwitchCountProperty);
             console.log("Name starts with 'Mr & Mrs':", nameStartsWithMrMrs);
             console.log("Is couple mode:", isCoupleMode);
+            console.log("Is individual with scores:", isIndividualWithScores);
             
             if (isCoupleMode) {
                 // Simple couple results - just names and scores
@@ -287,9 +290,46 @@
                     `;
                     resultsList.appendChild(row);
                 });
+            } else if (isIndividualWithScores) {
+                // Individual mode with scores
+                console.log("=== RENDERING INDIVIDUAL MODE WITH SCORES ===");
+                
+                // Sort by score descending
+                const sortedResults = [...results].sort((a, b) => {
+                    const scoreA = a.Score !== undefined ? a.Score : 0;
+                    const scoreB = b.Score !== undefined ? b.Score : 0;
+                    return scoreB - scoreA;
+                });
+                
+                sortedResults.forEach((result, index) => {
+                    const name = result.Name || result.name || 'Unknown';
+                    const score = result.Score !== undefined ? result.Score : (result.score !== undefined ? result.score : 0);
+                    const switchCount = result.SwitchCount !== undefined ? result.SwitchCount : (result.switchCount || 0);
+                    
+                    console.log(`Player ${index + 1}: Name="${name}", Score=${score}, Switches=${switchCount}`);
+                    
+                    // Medal emoji for top 3
+                    let medal = '';
+                    if (index === 0) medal = '?? ';
+                    else if (index === 1) medal = '?? ';
+                    else if (index === 2) medal = '?? ';
+                    
+                    const card = document.createElement('div');
+                    card.className = 'p-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border border-purple-200';
+                    card.innerHTML = `
+                        <div class="flex justify-between items-center mb-2">
+                            <div class="font-bold text-lg text-purple-700">${medal}${name}</div>
+                            <div class="flex items-center gap-2">
+                                <div class="text-xs bg-orange-200 text-orange-800 px-2 py-1 rounded">?? ${switchCount} switches</div>
+                                <div class="text-2xl font-bold text-green-700">Score: ${score}</div>
+                            </div>
+                        </div>
+                    `;
+                    resultsList.appendChild(card);
+                });
             } else {
-                // Individual mode - show with answers
-                console.log("=== RENDERING INDIVIDUAL MODE ===");
+                // Individual mode without scores (old style with answers)
+                console.log("=== RENDERING INDIVIDUAL MODE (OLD STYLE) ===");
                 results.forEach(result => {
                     const name = result.Name || result.name || 'Unknown';
                     const switchCount = result.SwitchCount !== undefined ? result.SwitchCount : (result.switchCount || 0);

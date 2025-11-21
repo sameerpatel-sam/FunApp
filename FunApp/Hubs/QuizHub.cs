@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.SignalR;
 using FunApp.Models;
 using FunApp.Services;
+using FunApp.Data;
+using Microsoft.EntityFrameworkCore;
 
 namespace FunApp.Hubs
 {
@@ -9,12 +11,14 @@ namespace FunApp.Hubs
         private readonly QuizService _quizService;
         private readonly PersistentQuizService _persistent;
         private readonly ILogger<QuizHub> _logger;
+        private readonly IDbContextFactory<AppDbContext> _dbFactory;
 
-        public QuizHub(QuizService quizService, PersistentQuizService persistent, ILogger<QuizHub> logger)
+        public QuizHub(QuizService quizService, PersistentQuizService persistent, ILogger<QuizHub> logger, IDbContextFactory<AppDbContext> dbFactory)
         {
             _quizService = quizService;
             _persistent = persistent;
             _logger = logger;
+            _dbFactory = dbFactory;
         }
 
         public async Task JoinQuiz(string userName)
@@ -96,14 +100,9 @@ namespace FunApp.Hubs
         {
             try
             {
-                // Evaluate couple answers BEFORE clearing and BEFORE moving to next question
-                if (_quizService.GetGameMode() == GameMode.Couple && _quizService.GetCurrentQuestionId() != null)
-                {
-                    await EvaluateCoupleAnswersForCurrentQuestion();
-                }
+                var mode = _quizService.GetGameMode();
                 
                 await _persistent.EnsureSessionAsync();
-                var mode = _quizService.GetGameMode();
                 var list = await _persistent.GetQuestionsAsync(mode);
                 if (list.Count == 0)
                 {
@@ -111,16 +110,30 @@ namespace FunApp.Hubs
                     return;
                 }
                 
+                // Check if we've reached the end BEFORE evaluating/advancing
+                var currentIndex = _quizService.GetCurrentQuestionNumber() - 1; // 0-based
+                var isAtLastQuestion = currentIndex >= list.Count - 1;
+                
+                // Evaluate answers from the CURRENT question (before advancing)
+                if (_quizService.GetCurrentQuestionId() != null)
+                {
+                    if (mode == GameMode.Couple)
+                    {
+                        await EvaluateCoupleAnswersForCurrentQuestion();
+                    }
+                    else if (mode == GameMode.Individual)
+                    {
+                        await EvaluateIndividualAnswersForCurrentQuestion();
+                    }
+                }
+                
                 // Clear answers AFTER evaluation
                 _quizService.ClearAnswers();
                 
-                // Check if we've reached the end of questions
-                var currentIndex = _quizService.GetCurrentQuestionNumber() - 1; // 0-based
-                var isLastQuestion = currentIndex >= list.Count - 1;
-                
-                if (isLastQuestion)
+                // If we just finished the last question, show game over and STOP
+                if (isAtLastQuestion)
                 {
-                    // We've shown all questions, display end game message
+                    // Show game over message
                     if (mode == GameMode.Couple)
                     {
                         await Clients.All.SendAsync("GameOver", "?? Game is now over! Let's check which couple has stolen today's show! Click 'Show Results' to see the winners! ??");
@@ -131,11 +144,15 @@ namespace FunApp.Hubs
                         await Clients.All.SendAsync("GameOver", "?? Game is now over! Click 'Show Results' to see who won! ??");
                         _logger.LogInformation("All questions completed. Game over message sent.");
                     }
-                    // Loop back to first question
+                    
+                    // Reset to beginning for potential replay, but DON'T show a new question
                     _quizService.AdvanceIndex(list.Count); // This will reset to 0
+                    
+                    // Exit here - do NOT show the next question
+                    return;
                 }
                 
-                // Now advance to next question
+                // Normal case: advance to next question
                 var idx = _quizService.AdvanceIndex(list.Count);
                 var q = list[idx];
                 _quizService.SetCurrentQuestionId(q.Id);
@@ -163,6 +180,42 @@ namespace FunApp.Hubs
                 await _persistent.SaveCoupleScoreAsync(properLastName, questionId, matched, partner1Answer, partner2Answer);
                 _logger.LogInformation("Couple {LastName}: Answers {Status} ('{Answer1}' vs '{Answer2}')", 
                     properLastName, matched ? "MATCHED" : "did not match", partner1Answer, partner2Answer);
+            }
+        }
+
+        private async Task EvaluateIndividualAnswersForCurrentQuestion()
+        {
+            var questionId = _quizService.GetCurrentQuestionId() ?? 0;
+            
+            // Get the question from database to retrieve correct answer
+            using var db = _dbFactory.CreateDbContext();
+            var question = await db.Questions.FindAsync(questionId);
+            
+            if (question == null || string.IsNullOrWhiteSpace(question.CorrectAnswer))
+            {
+                _logger.LogWarning("Question {QuestionId} not found or has no correct answer - skipping evaluation", questionId);
+                return;
+            }
+
+            var currentAnswers = _quizService.GetCurrentAnswers().ToList();
+            _logger.LogInformation("[DEBUG] EvaluateIndividualAnswers: Found {Count} answers to evaluate", currentAnswers.Count);
+
+            foreach (var userAnswer in currentAnswers)
+            {
+                var isCorrect = string.Equals(
+                    userAnswer.Answer.Trim(), 
+                    question.CorrectAnswer.Trim(), 
+                    StringComparison.OrdinalIgnoreCase);
+
+                await _persistent.SaveIndividualScoreAsync(
+                    userAnswer.User.Name, 
+                    questionId, 
+                    userAnswer.Answer, 
+                    question.CorrectAnswer, 
+                    isCorrect);
+
+                _logger.LogInformation("Individual {Name}: Answer '{UserAnswer}' vs Correct '{CorrectAnswer}' => {Result}",
+                    userAnswer.User.Name, userAnswer.Answer, question.CorrectAnswer, isCorrect ? "CORRECT" : "INCORRECT");
             }
         }
 
@@ -230,29 +283,67 @@ namespace FunApp.Hubs
             }
             else
             {
-                // Individual mode - existing logic
-                var answersDict = _quizService.GetAllUserAnswers();
-                var activeUsers = _quizService.GetAllUsers().ToDictionary(u => u.ConnectionId, u => u);
-                var allConnectionIds = answersDict.Keys.Union(activeUsers.Keys).Distinct();
-
-                var results = new List<dynamic>();
-                foreach (var cid in allConnectionIds)
+                // Individual mode - get scores from database
+                // Evaluate current question's answers if not yet evaluated
+                if (_quizService.GetCurrentQuestionId() != null)
                 {
-                    var user = activeUsers.ContainsKey(cid) ? activeUsers[cid] : _quizService.GetArchivedUser(cid);
-                    if (user == null) continue;
-
-                    List<object> answers = answersDict.ContainsKey(cid)
-                        ? answersDict[cid].Select(a => (object)new { Answer = a }).ToList()
-                        : new List<object>();
-
+                    var currentAnswers = _quizService.GetCurrentAnswers().ToList();
+                    if (currentAnswers.Count > 0)
+                    {
+                        _logger.LogInformation("Evaluating final question's answers before showing results...");
+                        await EvaluateIndividualAnswersForCurrentQuestion();
+                    }
+                }
+                
+                var sessionId = _persistent.GetCurrentSessionId();
+                if (!sessionId.HasValue)
+                {
+                    _logger.LogWarning("No active session ID found!");
+                    return new List<dynamic>();
+                }
+                
+                _logger.LogInformation("Getting individual scores from database for session {SessionId}", sessionId.Value);
+                
+                // Get individual scores from database
+                var dbScores = await _persistent.GetIndividualTotalScoresAsync(sessionId.Value);
+                
+                _logger.LogInformation("Found {Count} participants in database", dbScores.Count);
+                
+                // Get switch counts from QuizService
+                var activeUsers = _quizService.GetAllUsers().ToDictionary(u => u.Name, u => u, StringComparer.OrdinalIgnoreCase);
+                
+                var results = new List<dynamic>();
+                
+                foreach (var (name, score) in dbScores)
+                {
+                    var switchCount = 0;
+                    if (activeUsers.TryGetValue(name, out var user))
+                    {
+                        switchCount = user.SwitchCount;
+                    }
+                    else
+                    {
+                        // Try archived users
+                        var archivedUser = _quizService.GetAllUsers()
+                            .FirstOrDefault(u => string.Equals(u.Name, name, StringComparison.OrdinalIgnoreCase));
+                        if (archivedUser != null)
+                        {
+                            switchCount = archivedUser.SwitchCount;
+                        }
+                    }
+                    
+                    _logger.LogInformation("Individual {Name}: Score from DB = {Score}, SwitchCount = {SwitchCount}", 
+                        name, score, switchCount);
+                    
                     results.Add(new Dictionary<string, object>
                     {
-                        { "Name", user.Name },
-                        { "SwitchCount", user.SwitchCount },
-                        { "Answers", answers }
+                        { "Name", name },
+                        { "Score", score },
+                        { "SwitchCount", switchCount }
                     });
                 }
-
+                
+                _logger.LogInformation("Returning {Count} individual results to UI", results.Count);
                 return results;
             }
         }
@@ -276,24 +367,24 @@ namespace FunApp.Hubs
             return new List<Question>();
         }
 
-        public async Task AddQuestion(string text, string mode)
+        public async Task AddQuestion(string text, string mode, string? correctAnswer = null)
         {
             if (Enum.TryParse<GameMode>(mode, out var gameMode))
             {
-                await _persistent.AddQuestionAsync(text, gameMode);
+                await _persistent.AddQuestionAsync(text, gameMode, correctAnswer);
                 var questions = await _persistent.GetQuestionsAsync(gameMode);
                 await Clients.All.SendAsync("QuestionsUpdated", gameMode.ToString(), questions);
-                _logger.LogInformation("Question added: {Text}", text);
+                _logger.LogInformation("Question added: {Text}, CorrectAnswer: {CorrectAnswer}", text, correctAnswer ?? "N/A");
             }
         }
 
-        public async Task UpdateQuestion(int id, string text)
+        public async Task UpdateQuestion(int id, string text, string? correctAnswer = null)
         {
-            await _persistent.UpdateQuestionAsync(id, text);
+            await _persistent.UpdateQuestionAsync(id, text, correctAnswer);
             var gameMode = _quizService.GetGameMode();
             var questions = await _persistent.GetQuestionsAsync(gameMode);
             await Clients.All.SendAsync("QuestionsUpdated", gameMode.ToString(), questions);
-            _logger.LogInformation("Question {Id} updated", id);
+            _logger.LogInformation("Question {Id} updated, CorrectAnswer: {CorrectAnswer}", id, correctAnswer ?? "N/A");
         }
 
         public async Task DeleteQuestion(int id)

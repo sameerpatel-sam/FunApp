@@ -62,21 +62,31 @@ namespace FunApp.Services
             return await StartSessionAsync();
         }
 
-        public async Task<Question> AddQuestionAsync(string text, GameMode mode)
+        public async Task<Question> AddQuestionAsync(string text, GameMode mode, string? correctAnswer = null)
         {
             using var db = _factory.CreateDbContext();
-            var q = new Question { Text = text, GameMode = mode, CreatedAt = DateTime.UtcNow };
+            var q = new Question
+            {
+                Text = text,
+                GameMode = mode,
+                CorrectAnswer = mode == GameMode.Individual ? correctAnswer : null,
+                CreatedAt = DateTime.UtcNow
+            };
             db.Questions.Add(q);
             await db.SaveChangesAsync();
             return q;
         }
 
-        public async Task<Question?> UpdateQuestionAsync(int id, string text)
+        public async Task<Question?> UpdateQuestionAsync(int id, string text, string? correctAnswer = null)
         {
             using var db = _factory.CreateDbContext();
             var q = await db.Questions.FindAsync(id);
             if (q == null) return null;
             q.Text = text;
+            if (q.GameMode == GameMode.Individual)
+            {
+                q.CorrectAnswer = correctAnswer;
+            }
             await db.SaveChangesAsync();
             return q;
         }
@@ -215,6 +225,79 @@ namespace FunApp.Services
             }
 
             _logger.LogInformation("[GetCoupleTotalScores] Returning {Count} couple totals", result.Count);
+            
+            return result;
+        }
+
+        // Individual score persistence methods
+        public async Task<IndividualScore> SaveIndividualScoreAsync(string participantName, int questionId, 
+            string userAnswer, string correctAnswer, bool isCorrect)
+        {
+            var session = await EnsureSessionAsync();
+            using var db = _factory.CreateDbContext();
+
+            var individualScore = new IndividualScore
+            {
+                QuizSessionId = session.Id,
+                ParticipantName = participantName,
+                QuestionId = questionId,
+                UserAnswer = userAnswer,
+                CorrectAnswer = correctAnswer,
+                IsCorrect = isCorrect,
+                PointsAwarded = isCorrect ? 1 : 0,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            db.IndividualScores.Add(individualScore);
+            await db.SaveChangesAsync();
+
+            _logger.LogInformation("[DB SAVE] Saved individual score: SessionId={SessionId}, Participant={Participant}, QuestionId={QuestionId}, Correct={IsCorrect}, Points={Points}",
+                session.Id, participantName, questionId, isCorrect, individualScore.PointsAwarded);
+
+            return individualScore;
+        }
+
+        public async Task<Dictionary<string, int>> GetIndividualTotalScoresAsync(int sessionId)
+        {
+            using var db = _factory.CreateDbContext();
+
+            _logger.LogInformation("[GetIndividualTotalScores] Starting query for session {SessionId}", sessionId);
+
+            var allScores = await db.IndividualScores
+                .Where(i => i.QuizSessionId == sessionId)
+                .ToListAsync();
+
+            _logger.LogInformation("[GetIndividualTotalScores] Found {Count} total score entries in database", allScores.Count);
+            
+            if (allScores.Count == 0)
+            {
+                _logger.LogWarning("[GetIndividualTotalScores] NO SCORES FOUND IN DATABASE for session {SessionId}!", sessionId);
+            }
+            
+            foreach (var score in allScores)
+            {
+                _logger.LogInformation("[GetIndividualTotalScores]   - Participant='{Participant}', QuestionId={QuestionId}, PointsAwarded={PointsAwarded}",
+                    score.ParticipantName, score.QuestionId, score.PointsAwarded);
+            }
+
+            var grouped = allScores
+                .GroupBy(i => i.ParticipantName, StringComparer.OrdinalIgnoreCase)
+                .Select(g => new { Name = g.First().ParticipantName, TotalScore = g.Sum(i => i.PointsAwarded) })
+                .ToList();
+
+            _logger.LogInformation("[GetIndividualTotalScores] Grouped into {Count} participants:", grouped.Count);
+            foreach (var item in grouped)
+            {
+                _logger.LogInformation("[GetIndividualTotalScores]   - '{Name}': {TotalScore} points", item.Name, item.TotalScore);
+            }
+
+            var result = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in grouped)
+            {
+                result[item.Name] = item.TotalScore;
+            }
+
+            _logger.LogInformation("[GetIndividualTotalScores] Returning {Count} participant totals", result.Count);
             
             return result;
         }

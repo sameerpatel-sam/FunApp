@@ -35,6 +35,7 @@ namespace FunApp.Models
         public int Id { get; set; }
         public string Text { get; set; } = string.Empty;
         public GameMode GameMode { get; set; } = GameMode.Individual;
+        public string? CorrectAnswer { get; set; } = null; // For Individual mode only
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 
@@ -68,5 +69,18 @@ namespace FunApp.Models
         public List<string> Partner1Answers { get; set; } = new();
         public List<string> Partner2Answers { get; set; } = new();
         public int MatchedAnswers { get; set; }
+    }
+
+    public class IndividualScore
+    {
+        public int Id { get; set; }
+        public int QuizSessionId { get; set; }
+        public string ParticipantName { get; set; } = string.Empty;
+        public int QuestionId { get; set; }
+        public string UserAnswer { get; set; } = string.Empty;
+        public string CorrectAnswer { get; set; } = string.Empty;
+        public bool IsCorrect { get; set; }
+        public int PointsAwarded { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 }
