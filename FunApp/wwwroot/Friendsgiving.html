@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Friendsgiving 2025</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+            position: relative;
+        }
+
+        /* Emoji-specific font support */
+        .emoji, .emoji-row, .leaf, .agenda-title {
+            font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji', sans-serif;
+        }
+
+        .particle {
+            position: absolute;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            animation: float 15s infinite;
+            pointer-events: none;
+        }
+
+        @keyframes float {
+            0%, 100% {
+                transform: translateY(0) translateX(0) rotate(0deg);
+                opacity: 0;
+            }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% {
+                transform: translateY(-100vh) translateX(100px) rotate(360deg);
+                opacity: 0;
+            }
+        }
+
+        .leaf {
+            position: absolute;
+            font-size: 2rem;
+            animation: fall 8s infinite;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        @keyframes fall {
+            0% {
+                transform: translateY(-100px) rotate(0deg);
+                opacity: 0;
+            }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% {
+                transform: translateY(100vh) rotate(360deg);
+                opacity: 0;
+            }
+        }
+
+        .leaf:nth-child(1) { left: 10%; animation-delay: 0s; }
+        .leaf:nth-child(2) { left: 30%; animation-delay: 1.5s; }
+        .leaf:nth-child(3) { left: 50%; animation-delay: 3s; }
+        .leaf:nth-child(4) { left: 70%; animation-delay: 4.5s; }
+        .leaf:nth-child(5) { left: 90%; animation-delay: 6s; }
+
+        .container {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.5vh 3vw 1vh 3vw;
+            position: relative;
+            z-index: 10;
+        }
+
+        /* Header */
+        header {
+            text-align: center;
+            width: 100%;
+            animation: slideInDown 0.8s ease-out;
+        }
+
+        @keyframes slideInDown {
+            from {
+                opacity: 0;
+                transform: translateY(-50px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .welcome-line1 {
+            font-size: 2vw;
+            color: white;
+            font-weight: 700;
+            text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.4);
+            letter-spacing: 0.1vw;
+            margin-bottom: 0.1vh;
+        }
+
+        .welcome-line2 {
+            font-size: 3.5vw;
+            color: white;
+            font-weight: 900;
+            text-shadow: 4px 4px 8px rgba(0, 0, 0, 0.4);
+            letter-spacing: 0.4vw;
+            margin-bottom: 0.2vh;
+        }
+
+        .year {
+            font-size: 5vw;
+            font-weight: 900;
+            color: #ffd700;
+            text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.3);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.08); }
+        }
+
+        /* Middle Content */
+        .middle-content {
+            display: flex;
+            gap: 2vw;
+            width: 100%;
+            max-width: 1600px;
+            flex: 0 1 auto;
+            align-items: center;
+            animation: slideInUp 1s ease-out 0.3s both;
+            margin-bottom: 0.5vh;
+        }
+
+        @keyframes slideInUp {
+            from {
+                opacity: 0;
+                transform: translateY(50px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .left-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 1vh;
+        }
+
+        .message-box {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 1.5vw;
+            padding: 1.5vh 2vw;
+            box-shadow: 0 15px 50px rgba(0, 0, 0, 0.3);
+        }
+
+        .message-text {
+            font-size: 1.4vw;
+            color: #333;
+            line-height: 1.3;
+            text-align: center;
+            font-weight: 600;
+            font-style: italic;
+        }
+
+        .fun-box {
+            background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%);
+            border-radius: 1.5vw;
+            padding: 1.2vh 2vw;
+            box-shadow: 0 15px 50px rgba(255, 215, 0, 0.4);
+            border: 0.3vw solid white;
+        }
+
+        .fun-text {
+            font-size: 1.2vw;
+            color: #333;
+            line-height: 1.2;
+            text-align: center;
+            font-weight: 800;
+            font-style: italic;
+        }
+
+        .agenda-section {
+            width: 350px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 1.5vw;
+            padding: 1vh 1.2vw;
+            box-shadow: 0 15px 50px rgba(0, 0, 0, 0.3);
+        }
+
+        .agenda-title {
+            font-size: 1.8vw;
+            font-weight: 900;
+            color: #667eea;
+            margin-bottom: 0.5vh;
+            text-align: center;
+        }
+
+        .agenda-items {
+            display: flex;
+            flex-direction: column;
+            gap: 0.4vh;
+        }
+
+        .agenda-item {
+            padding: 0.6vh 1vw;
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%);
+            border-radius: 0.8vw;
+            border-left: 0.3vw solid #667eea;
+            transition: all 0.3s ease;
+        }
+
+        .agenda-item:hover {
+            transform: translateX(10px);
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.25) 0%, rgba(118, 75, 162, 0.25) 100%);
+        }
+
+        .agenda-activity {
+            font-size: 0.95vw;
+            font-weight: 700;
+            color: #333;
+            margin-bottom: 0.1vh;
+        }
+
+        .agenda-time {
+            font-size: 0.8vw;
+            color: #667eea;
+            font-weight: 600;
+        }
+
+        /* Footer */
+        footer {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            flex-shrink: 0;
+            animation: slideInUp 1s ease-out both;
+        }
+
+        .start-button {
+            display: inline-block;
+            padding: 1vh 4vw;
+            font-size: 1.6vw;
+            font-weight: 900;
+            color: white;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 5vw;
+            cursor: pointer;
+            box-shadow: 0 20px 50px rgba(102, 126, 234, 0.6);
+            transition: all 0.3s ease;
+            text-decoration: none;
+            text-transform: uppercase;
+            letter-spacing: 0.2vw;
+            text-align: center;
+        }
+
+        .start-button:hover {
+            transform: translateY(-8px) scale(1.05);
+            box-shadow: 0 25px 60px rgba(102, 126, 234, 0.8);
+        }
+
+        .confetti {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            animation: confettiFall 5s infinite;
+            pointer-events: none;
+        }
+
+        @keyframes confettiFall {
+            0% {
+                transform: translateY(-100px) rotate(0deg);
+                opacity: 1;
+            }
+            100% {
+                transform: translateY(100vh) rotate(720deg);
+                opacity: 0;
+            }
+        }
+
+        .sparkle {
+            position: absolute;
+            width: 6px;
+            height: 6px;
+            background: white;
+            border-radius: 50%;
+            animation: sparkle 2s infinite;
+            pointer-events: none;
+        }
+
+        @keyframes sparkle {
+            0%, 100% {
+                opacity: 0;
+                transform: scale(0);
+            }
+            50% {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+    </style>
+</head>
+<body>
+    <script>
+        for (let i = 0; i < 20; i++) {
+            const particle = document.createElement('div');
+            particle.className = 'particle';
+            particle.style.width = Math.random() * 12 + 6 + 'px';
+            particle.style.height = particle.style.width;
+            particle.style.left = Math.random() * 100 + '%';
+            particle.style.animationDelay = Math.random() * 15 + 's';
+            particle.style.animationDuration = (Math.random() * 10 + 10) + 's';
+            document.body.appendChild(particle);
+        }
+
+        for (let i = 0; i < 40; i++) {
+            const sparkle = document.createElement('div');
+            sparkle.className = 'sparkle';
+            sparkle.style.left = Math.random() * 100 + '%';
+            sparkle.style.top = Math.random() * 100 + '%';
+            sparkle.style.animationDelay = Math.random() * 2 + 's';
+            document.body.appendChild(sparkle);
+        }
+    </script>
+
+    <div class="leaf">??</div>
+    <div class="leaf">??</div>
+    <div class="leaf">??</div>
+    <div class="leaf">??</div>
+    <div class="leaf">??</div>
+
+    <div class="container">
+        <header>
+            <div class="welcome-line1">Patel family welcomes you to celebrate</div>
+            <div class="welcome-line2">FRIENDSGIVING</div>
+            <div class="year">2025</div>
+        </header>
+
+        <div class="middle-content">
+            <div class="left-section">
+                <div class="message-box">
+                    <div class="message-text">
+                        True friends are like mirrors and shadow. Never lie like a mirror and always with you like a shadow.
+                    </div>
+                </div>
+
+                <div class="fun-box">
+                    <div class="fun-text">
+                        Did you leave your shoes/stress/tension outside the door? For next few hours, let's just have fun!
+                    </div>
+                </div>
+            </div>
+
+            <div class="agenda-section">
+                <div class="agenda-title">?? Sham ka Plan</div>
+                
+                <div class="agenda-items">
+                    <div class="agenda-item">
+                        <div class="agenda-activity">� Arrival / Snacks / Chit-Chat</div>
+                        <div class="agenda-time">6:30 PM - 7:30 PM</div>
+                    </div>
+
+                    <div class="agenda-item">
+                        <div class="agenda-activity">� Madirapan</div>
+                        <div class="agenda-time">7:00 PM - 8:00 PM</div>
+                    </div>
+
+                    <div class="agenda-item">
+                        <div class="agenda-activity">� Thanksgiving Speech</div>
+                        <div class="agenda-time">8:00 PM - 8:45 PM</div>
+                    </div>
+
+                    <div class="agenda-item">
+                        <div class="agenda-activity">� Kids Games</div>
+                        <div class="agenda-time">8:45 PM - 9:15 PM</div>
+                    </div>
+
+                    <div class="agenda-item">
+                        <div class="agenda-activity">� Adult Games</div>
+                        <div class="agenda-time">9:15 PM - 10:00 PM</div>
+                    </div>
+
+                    <div class="agenda-item">
+                        <div class="agenda-activity">� Dinner</div>
+                        <div class="agenda-time">10:00 PM</div>
+                    </div>
+
+                    <div class="agenda-item">
+                        <div class="agenda-activity">� Dance</div>
+                        <div class="agenda-time">10:30 PM</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <a href="/" class="start-button">
+                START THE FUN!
+            </a>
+        </footer>
+    </div>
+
+    <script>
+        setTimeout(() => {
+            for (let i = 0; i < 100; i++) {
+                const confetti = document.createElement('div');
+                confetti.className = 'confetti';
+                confetti.style.left = Math.random() * 100 + '%';
+                confetti.style.background = `hsl(${Math.random() * 360}, 100%, 50%)`;
+                confetti.style.animationDelay = Math.random() * 3 + 's';
+                confetti.style.animationDuration = (Math.random() * 3 + 3) + 's';
+                document.body.appendChild(confetti);
+                setTimeout(() => confetti.remove(), 8000);
+            }
+        }, 500);
+
+        setInterval(() => {
+            for (let i = 0; i < 20; i++) {
+                const confetti = document.createElement('div');
+                confetti.className = 'confetti';
+                confetti.style.left = Math.random() * 100 + '%';
+                confetti.style.background = `hsl(${Math.random() * 360}, 100%, 50%)`;
+                confetti.style.animationDuration = (Math.random() * 3 + 3) + 's';
+                document.body.appendChild(confetti);
+                setTimeout(() => confetti.remove(), 8000);
+            }
+        }, 5000);
+    </script>
+</body>
+</html>

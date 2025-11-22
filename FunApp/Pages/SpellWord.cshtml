@@ -31,7 +31,7 @@
                 </div>
 
                 <!-- Score Table -->
-                <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
+                <div id="scoreBoard" class="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
                     <h2 class="text-2xl font-bold mb-4">Score Board</h2>
                     <div class="overflow-x-auto">
                         <table class="w-full text-left">
@@ -163,15 +163,20 @@
         // Render score table
         function renderScoreTable() {
             const tbody = document.getElementById('scoreTableBody');
+            const scoreBoard = document.getElementById('scoreBoard');
             tbody.innerHTML = '';
 
             // Filter to only show revealed words
             const revealedWords = allWords.filter(w => w.isRevealed);
 
             if (revealedWords.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="3" class="text-center py-4 text-white/70">No words revealed yet</td></tr>';
+                // Hide the entire scoreboard when no words are revealed
+                scoreBoard.classList.add('hidden');
                 return;
             }
+
+            // Show the scoreboard
+            scoreBoard.classList.remove('hidden');
 
             revealedWords.forEach(word => {
                 const tr = document.createElement('tr');
